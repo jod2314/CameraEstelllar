@@ -19,20 +19,29 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const requestPermission = async () => {
       if (Platform.OS === 'android') {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          {
-            title: "Permiso de Cámara",
-            message: "La app necesita acceso a la cámara para tomar fotos astronómicas.",
-            buttonNeutral: "Preguntar luego",
-            buttonNegative: "Cancelar",
-            buttonPositive: "OK"
+        try {
+          // Solicitamos múltiples permisos para cubrir diferentes versiones de Android
+          const permissionsToRequest = [
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+            // Para Android 13+ (API 33)
+            PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES, 
+          ];
+
+          const granted = await PermissionsAndroid.requestMultiple(permissionsToRequest);
+
+          // Verificamos si la CÁMARA (el más crítico) fue autorizado
+          if (granted[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED) {
+            console.log('Permiso de cámara concedido');
+            setHasPermission(true);
+          } else {
+            Alert.alert("Permiso denegado", "Es necesario el permiso de cámara para usar esta app.");
           }
-        );
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          setHasPermission(true);
-        } else {
-          Alert.alert("Permiso denegado", "No se puede usar la cámara sin permisos.");
+          
+          // Nota: WRITE_EXTERNAL_STORAGE puede ser denegado en Android 13+ y está bien, 
+          // pero es necesario para Android < 13.
+        } catch (err) {
+          console.warn(err);
         }
       } else {
         setHasPermission(true);
