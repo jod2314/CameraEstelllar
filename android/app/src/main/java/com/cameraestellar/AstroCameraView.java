@@ -57,6 +57,8 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     private ImageReader mJpegReader;
     private ImageReader mRawReader;
     private CameraCharacteristics mCameraChars;
+    private android.util.Range<Integer> mIsoRange;
+    private android.util.Range<Long> mExposureRange;
     
     // Race condition handling for RAW (DNG)
     private final Map<Long, Image> mPendingRawImages = new ConcurrentHashMap<>();
@@ -114,6 +116,16 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         }
     }
 
+    private int getClampedIso(int iso) {
+        if (mIsoRange == null) return iso;
+        return Math.max(mIsoRange.getLower(), Math.min(iso, mIsoRange.getUpper()));
+    }
+
+    private long getClampedExposure(long exposureNs) {
+        if (mExposureRange == null) return exposureNs;
+        return Math.max(mExposureRange.getLower(), Math.min(exposureNs, mExposureRange.getUpper()));
+    }
+
     public void takePicture() {
         synchronized (mCameraStateLock) {
             if (mCameraDevice == null || mCaptureSession == null) {
@@ -121,18 +133,25 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                 return;
             }
             try {
+                Log.d(TAG, "Iniciando captura...");
                 final CaptureRequest.Builder captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
                 captureBuilder.addTarget(mJpegReader.getSurface());
                 
                 if (mRawReader != null) {
                     captureBuilder.addTarget(mRawReader.getSurface());
+                    Log.d(TAG, "Target RAW añadido.");
                 }
 
                 // Configuración Manual Completa (Exposición + Enfoque)
+                int clampedIso = getClampedIso(mIso);
+                long clampedExposure = getClampedExposure(mExposureNs);
+                
+                Log.d(TAG, "Configurando captura: ISO=" + clampedIso + ", Exp=" + clampedExposure + "ns");
+
                 captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
-                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, mIso);
-                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, mExposureNs);
-                captureBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, mExposureNs);
+                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso);
+                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedExposure);
+                captureBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, clampedExposure);
                 
                 // Enfoque Manual
                 captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
@@ -140,41 +159,49 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
 
                 captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 90);
                 
-                // Add tag if needed for tracking, but timestamp is better
-
                 CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
                     @Override
                     public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
-                        Log.d(TAG, "Captura completada en sensor. Timestamp: " + result.get(CaptureResult.SENSOR_TIMESTAMP));
+                        Log.d(TAG, "KERNEL: Captura completada. Timestamp: " + result.get(CaptureResult.SENSOR_TIMESTAMP));
                         handleCaptureResult(result);
                         scheduleUpdatePreview();
                     }
                     
                     @Override
                     public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull android.hardware.camera2.CaptureFailure failure) {
-                        Log.e(TAG, "Captura fallida: " + failure.getReason());
+                        Log.e(TAG, "KERNEL ERROR: Captura fallida. Reason: " + failure.getReason());
                         scheduleUpdatePreview();
+                    }
+                    
+                    @Override
+                    public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
+                        Log.d(TAG, "KERNEL: Captura iniciada. Frame: " + frameNumber);
                     }
                 };
 
                 mCaptureSession.stopRepeating(); 
                 mCaptureSession.capture(captureBuilder.build(), captureCallback, mBackgroundHandler);
-                Log.d(TAG, "Solicitud de captura enviada.");
+                Log.d(TAG, "Solicitud de captura enviada al driver.");
 
             } catch (CameraAccessException e) {
-                Log.e(TAG, "Error al tomar foto: " + e.getMessage());
+                Log.e(TAG, "Error crítico al tomar foto: " + e.getMessage());
             }
         }
     }
     
     private void handleCaptureResult(TotalCaptureResult result) {
         Long timestamp = result.get(CaptureResult.SENSOR_TIMESTAMP);
-        if (timestamp == null) return;
+        if (timestamp == null) {
+            Log.e(TAG, "Error: Timestamp nulo en resultado de captura.");
+            return;
+        }
 
         Image pendingImage = mPendingRawImages.remove(timestamp);
         if (pendingImage != null) {
+            Log.d(TAG, "Sincronización exitosa (Result llegó último). Guardando RAW...");
             saveRawToGallery(pendingImage, result);
         } else {
+            Log.d(TAG, "Resultado llegó primero. Esperando imagen RAW...");
             mPendingCaptureResults.put(timestamp, result);
         }
     }
@@ -240,6 +267,10 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                     bestPixelSize = pixelSize;
                     bestCameraId = cameraId;
                     mCameraChars = chars;
+                    
+                    // Guardamos rangos soportados
+                    mExposureRange = exposureRange;
+                    mIsoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
 
                     StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                     if (map != null) {
@@ -261,6 +292,8 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             }
 
             Log.i(TAG, "Lente Astro Seleccionado: " + mCameraId + " (RAW: " + (largestRawSize != null) + ")");
+            if (mIsoRange != null) Log.i(TAG, "Rango ISO: " + mIsoRange.getLower() + " - " + mIsoRange.getUpper());
+            if (mExposureRange != null) Log.i(TAG, "Rango Exp: " + mExposureRange.getLower() + " - " + mExposureRange.getUpper() + " ns");
 
             startBackgroundThread();
 
@@ -286,6 +319,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     private final ImageReader.OnImageAvailableListener mJpegImageListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader reader) {
+            Log.d(TAG, "JPEG disponible en buffer.");
             Image image = null;
             try {
                 image = reader.acquireNextImage();
@@ -299,6 +333,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     private final ImageReader.OnImageAvailableListener mRawImageListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader reader) {
+            Log.d(TAG, "RAW disponible en buffer.");
             Image image = reader.acquireNextImage(); // Use acquireNextImage for consistency
             if (image == null) return;
             
@@ -306,120 +341,18 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             TotalCaptureResult result = mPendingCaptureResults.remove(timestamp);
             
             if (result != null) {
+                Log.d(TAG, "Sincronización exitosa (Imagen llegó última). Guardando RAW...");
                 saveRawToGallery(image, result);
             } else {
+                Log.d(TAG, "Imagen RAW llegó primero. Esperando metadatos...");
                 mPendingRawImages.put(timestamp, image);
             }
         }
     };
+    
+    // ... (saveRawToGallery and saveJpegToGallery methods) ...
 
-    private void saveRawToGallery(Image image, TotalCaptureResult result) {
-        try {
-            if (mCameraChars == null) return;
-            
-            ContentValues values = new ContentValues();
-            values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRO_" + System.currentTimeMillis() + ".dng");
-            values.put(MediaStore.Images.Media.MIME_TYPE, "image/x-adobe-dng");
-            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AstroCamera");
-
-            Uri uri = getContext().getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-            if (uri == null) {
-                Log.e(TAG, "Error al crear URI para DNG");
-                return;
-            }
-
-            try (OutputStream output = getContext().getContentResolver().openOutputStream(uri);
-                 DngCreator dngCreator = new DngCreator(mCameraChars, result)) {
-                
-                // Set orientation if needed, or other metadata overrides
-                dngCreator.writeImage(output, image);
-                Log.d(TAG, "RAW (DNG) guardado: " + uri.toString());
-                
-            } catch (IOException e) {
-                Log.e(TAG, "Error escritura RAW: " + e.getMessage());
-            }
-        } finally {
-            image.close();
-        }
-    }
-
-    private void saveJpegToGallery(Image image) {
-        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-        ContentValues values = new ContentValues();
-        values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRO_" + System.currentTimeMillis() + ".jpg");
-        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
-        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AstroCamera");
-        Uri uri = getContext().getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
-        if (uri == null) return;
-        try (OutputStream output = getContext().getContentResolver().openOutputStream(uri);
-             WritableByteChannel channel = Channels.newChannel(output)) {
-            channel.write(buffer);
-            Log.d(TAG, "JPEG guardado: " + uri.toString());
-        } catch (IOException e) {
-            Log.e(TAG, "Error JPEG: " + e.getMessage());
-        }
-    }
-
-    private final CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
-        @Override
-        public void onOpened(@NonNull CameraDevice camera) {
-            synchronized (mCameraStateLock) {
-                mCameraDevice = camera;
-                createCameraPreviewSession();
-            }
-        }
-        @Override
-        public void onDisconnected(@NonNull CameraDevice camera) {
-            synchronized (mCameraStateLock) {
-                camera.close();
-                mCameraDevice = null;
-            }
-        }
-        @Override
-        public void onError(@NonNull CameraDevice camera, int error) {
-            synchronized (mCameraStateLock) {
-                camera.close();
-                mCameraDevice = null;
-                Log.e(TAG, "Camera Device Error: " + error);
-            }
-        }
-    };
-
-    private void createCameraPreviewSession() {
-        try {
-            SurfaceTexture texture = mTextureView.getSurfaceTexture();
-            assert texture != null;
-            texture.setDefaultBufferSize(1920, 1080);
-            Surface surface = new Surface(texture);
-            
-            List<Surface> targets = new ArrayList<>();
-            targets.add(surface);
-            targets.add(mJpegReader.getSurface());
-            if (mRawReader != null) targets.add(mRawReader.getSurface());
-
-            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-            mPreviewRequestBuilder.addTarget(surface);
-
-            mCameraDevice.createCaptureSession(targets,
-                new CameraCaptureSession.StateCallback() {
-                    @Override
-                    public void onConfigured(@NonNull CameraCaptureSession session) {
-                        synchronized (mCameraStateLock) {
-                            if (mCameraDevice == null) return;
-                            mCaptureSession = session;
-                            updatePreview();
-                        }
-                    }
-                    @Override
-                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                         Log.e(TAG, "Fallo al configurar sesión de captura");
-                    }
-                }, mBackgroundHandler);
-        } catch (CameraAccessException e) {
-            Log.e(TAG, "Error sesión: " + e.getMessage());
-        }
-    }
-
+    // Actualizamos updatePreview para usar clamping
     private void updatePreview() {
         synchronized (mCameraStateLock) {
             if (mCaptureSession == null) return;
@@ -428,13 +361,16 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                 long MAX_PREVIEW_EXPOSURE_NS = 66_666_666L; 
                 long previewExposure = Math.min(mExposureNs, MAX_PREVIEW_EXPOSURE_NS);
                 
+                int clampedIso = getClampedIso(mIso);
+                long clampedPreviewExposure = getClampedExposure(previewExposure);
+
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
                 mPreviewRequestBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, mFocusDistance);
                 
-                mPreviewRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, mIso);
-                mPreviewRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, previewExposure);
-                mPreviewRequestBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, previewExposure);
+                mPreviewRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso);
+                mPreviewRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedPreviewExposure);
+                mPreviewRequestBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, clampedPreviewExposure);
                 mCaptureSession.setRepeatingRequest(mPreviewRequestBuilder.build(), null, mBackgroundHandler);
             } catch (CameraAccessException e) {
                 Log.e(TAG, "Error preview: " + e.getMessage());
