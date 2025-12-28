@@ -14,15 +14,21 @@
 - **Estrategia Fase 2:** Implementación de módulos nativos (Native Modules) para acceso a Camera2 API nivel hardware.
 
 ## 3. Historial de Cambios Relevantes
-- **[Fecha Actual]:** Creación del archivo de memoria. Definición de stack tecnológico.
+- **[Fecha Actual]:** 
+    - Mejora en Selección de Cámara: Implementado algoritmo inteligente en `AstroCameraView.java` que prioriza sensores con capacidad `MANUAL_SENSOR` y mayor tamaño de píxel (mejor para baja luz) sobre la resolución bruta.
+    - Solución a "Pantalla Negra": Implementación de solicitud de permisos en Runtime (App.tsx) y corrección de LayoutParams en AstroCameraView.java.
+    - Build exitoso del módulo nativo usando JDK 17 (Android Studio JBR).
+- **[Anterior]:** Creación del archivo de memoria. Definición de stack tecnológico.
 
-## 4. Próximos Pasos Inmediatos
-1. Implementar controles manuales (ISO, Shutter Speed).
-2. Configurar captura de fotos y guardado en galería.
-3. Implementar soporte para formato RAW/DNG.
+## 4. Próximos Pasos Inmediatos (Fase de Estabilización y Expansión)
+1. **Auditoría del Sistema:** Inspección profunda de código para prevenir fugas de memoria, conflictos de hilos y errores a largo plazo (En Progreso).
+2. **Soporte RAW (DNG):** Implementar captura de archivos DNG para edición profesional.
+3. **Temporizador:** Añadir retardo (3s/10s) al disparo para evitar vibraciones.
+4. **Enfoque Manual:** Implementar control deslizante de foco (Focus Distance) para fijar enfoque al infinito.
+5. **Stacking Básico:** Automatizar captura de múltiples exposiciones consecutivas para apilado.
 
 ## 5. Estado del Entorno
-- **JDK:** 17 (vía Android Studio JBR).
+- **JDK:** 17 (C:\Program Files\Android\Android Studio\jbr).
 - **Gradle:** 8.13.
 - **SDK Android:** API 36 (Android 15).
 - **Dispositivo:** Físico detectado y funcional.
