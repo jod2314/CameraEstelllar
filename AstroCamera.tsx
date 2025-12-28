@@ -18,13 +18,17 @@ export const AstroCamera = forwardRef<AstroCameraRef, AstroCameraProps>((props, 
 
   useImperativeHandle(ref, () => ({
     takePicture: () => {
+      console.log('AstroCamera: Intentando disparar...');
       const handle = findNodeHandle(nativeRef.current);
       if (handle) {
+        console.log('AstroCamera: Handle encontrado, enviando comando takePicture');
         UIManager.dispatchViewManagerCommand(
           handle,
-          UIManager.getViewManagerConfig('AstroCameraView').Commands.takePicture.toString(),
+          'takePicture', // Usamos el nombre del comando directamente por claridad
           []
         );
+      } else {
+        console.warn('AstroCamera: No se encontró el handle de la cámara');
       }
     },
   }));

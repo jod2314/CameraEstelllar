@@ -49,10 +49,30 @@ public class AstroCameraViewManager extends SimpleViewManager<AstroCameraView> {
 
     @Override
     public void receiveCommand(@NonNull AstroCameraView root, String commandId, @Nullable ReadableArray args) {
+        Log.d(REACT_CLASS, "Comando recibido: " + commandId);
+        
+        // Intentar manejarlo como ID numérico primero
+        try {
+            int commandIdInt = Integer.parseInt(commandId);
+            if (commandIdInt == COMMAND_TAKE_PICTURE) {
+                root.takePicture();
+                return;
+            }
+        } catch (NumberFormatException e) {
+            // Si no es un número, verificar si es el nombre del comando
+            if (commandId.equals("takePicture")) {
+                root.takePicture();
+                return;
+            }
+        }
+        
         super.receiveCommand(root, commandId, args);
-        int commandIdInt = Integer.parseInt(commandId);
+    }
 
-        if (commandIdInt == COMMAND_TAKE_PICTURE) {
+    // Para compatibilidad con versiones anteriores de RN que usan int en lugar de String
+    public void receiveCommand(@NonNull AstroCameraView root, int commandId, @Nullable ReadableArray args) {
+        Log.d(REACT_CLASS, "Comando recibido (int): " + commandId);
+        if (commandId == COMMAND_TAKE_PICTURE) {
             root.takePicture();
         }
     }

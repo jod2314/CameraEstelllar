@@ -77,8 +77,11 @@ function App(): React.JSX.Element {
   };
 
   const triggerCapture = () => {
+    console.log('App: Disparando cámara...');
     if (cameraRef.current) {
       cameraRef.current.takePicture();
+    } else {
+      console.warn('App: cameraRef.current es nulo');
     }
   };
 
