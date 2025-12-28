@@ -35,6 +35,11 @@ public class AstroCameraViewManager extends SimpleViewManager<AstroCameraView> {
         view.setExposure(seconds);
     }
 
+    @ReactProp(name = "focusDistance")
+    public void setFocusDistance(AstroCameraView view, float distance) {
+        view.setFocusDistance(distance);
+    }
+
     @Override
     public Map<String, Integer> getCommandsMap() {
         return MapBuilder.of(

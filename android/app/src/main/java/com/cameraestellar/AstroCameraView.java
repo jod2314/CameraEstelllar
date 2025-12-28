@@ -11,6 +11,7 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.DngCreator;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
@@ -33,9 +34,11 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.List;
 
 public class AstroCameraView extends FrameLayout implements TextureView.SurfaceTextureListener {
 
@@ -43,21 +46,23 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     private TextureView mTextureView;
     private String mCameraId;
     
-    // Concurrency Lock
     private final Object mCameraStateLock = new Object();
 
-    // Camera Resources (Guarded by mCameraStateLock)
     private CameraDevice mCameraDevice;
     private CameraCaptureSession mCaptureSession;
     private CaptureRequest.Builder mPreviewRequestBuilder;
-    private ImageReader mImageReader;
+    private ImageReader mJpegReader;
+    private ImageReader mRawReader;
+    private CameraCharacteristics mCameraChars;
+    private TotalCaptureResult mLastCaptureResult;
 
     private HandlerThread mBackgroundThread;
     private Handler mBackgroundHandler;
 
     // Valores manuales
     private int mIso = 800;
-    private long mExposureNs = 100000000L; // 0.1s default
+    private long mExposureNs = 100000000L; 
+    private float mFocusDistance = 0.0f; // 0.0 = Infinito (Default para Astro)
     
     // Debounce Runnable
     private final Runnable mUpdatePreviewTask = new Runnable() {
@@ -91,10 +96,15 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         scheduleUpdatePreview();
     }
 
+    public void setFocusDistance(float distance) {
+        this.mFocusDistance = distance;
+        scheduleUpdatePreview();
+    }
+
     private void scheduleUpdatePreview() {
         if (mBackgroundHandler != null) {
             mBackgroundHandler.removeCallbacks(mUpdatePreviewTask);
-            mBackgroundHandler.postDelayed(mUpdatePreviewTask, 50); // 50ms debounce
+            mBackgroundHandler.postDelayed(mUpdatePreviewTask, 50);
         }
     }
 
@@ -102,23 +112,32 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         synchronized (mCameraStateLock) {
             if (mCameraDevice == null || mCaptureSession == null) return;
             try {
-                // Crear Request de Captura
                 final CaptureRequest.Builder captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-                captureBuilder.addTarget(mImageReader.getSurface());
+                captureBuilder.addTarget(mJpegReader.getSurface());
+                
+                if (mRawReader != null) {
+                    captureBuilder.addTarget(mRawReader.getSurface());
+                }
 
-                // Aplicar configuraciones manuales
+                // Configuración Manual Completa (Exposición + Enfoque)
                 captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
-                captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
                 captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, mIso);
                 captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, mExposureNs);
                 captureBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, mExposureNs);
+                
+                // Enfoque Manual
+                captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
+                captureBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, mFocusDistance);
+
                 captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 90);
 
                 CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
                     @Override
                     public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                         Log.d(TAG, "Captura completada en sensor");
-                        // Reiniciar preview después de capturar
+                        synchronized (mCameraStateLock) {
+                            mLastCaptureResult = result;
+                        }
                         scheduleUpdatePreview();
                     }
                 };
@@ -162,6 +181,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             long maxExposureRange = 0;
             float bestPixelSize = 0;
             Size largestJpegSize = new Size(1920, 1080);
+            Size largestRawSize = null;
 
             for (String cameraId : manager.getCameraIdList()) {
                 CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
@@ -171,11 +191,10 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
 
                 int[] caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
                 boolean hasManual = false;
+                boolean hasRaw = false;
                 for (int cap : caps) {
-                    if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) {
-                        hasManual = true;
-                        break;
-                    }
+                    if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) hasManual = true;
+                    if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) hasRaw = true;
                 }
                 if (!hasManual) continue;
 
@@ -190,13 +209,14 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                     maxExposureRange = maxExp;
                     bestPixelSize = pixelSize;
                     bestCameraId = cameraId;
+                    mCameraChars = chars;
 
                     StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                     if (map != null) {
-                        largestJpegSize = Collections.max(
-                            Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)),
-                            new CompareSizesByArea()
-                        );
+                        largestJpegSize = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)), new CompareSizesByArea());
+                        if (hasRaw) {
+                            largestRawSize = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.RAW_SENSOR)), new CompareSizesByArea());
+                        }
                     }
                 }
             }
@@ -204,12 +224,18 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             mCameraId = bestCameraId;
             if (mCameraId == null) return;
 
-            Log.i(TAG, "Lente seleccionado: " + mCameraId + " | Max Exp: " + maxExposureRange);
-
-            mImageReader = ImageReader.newInstance(largestJpegSize.getWidth(), largestJpegSize.getHeight(), ImageFormat.JPEG, 2);
-            mImageReader.setOnImageAvailableListener(mOnImageAvailableListener, mBackgroundHandler);
+            Log.i(TAG, "Lente Astro Seleccionado: " + mCameraId + " (RAW: " + (largestRawSize != null) + ")");
 
             startBackgroundThread();
+
+            mJpegReader = ImageReader.newInstance(largestJpegSize.getWidth(), largestJpegSize.getHeight(), ImageFormat.JPEG, 2);
+            mJpegReader.setOnImageAvailableListener(mJpegImageListener, mBackgroundHandler);
+
+            if (largestRawSize != null) {
+                mRawReader = ImageReader.newInstance(largestRawSize.getWidth(), largestRawSize.getHeight(), ImageFormat.RAW_SENSOR, 2);
+                mRawReader.setOnImageAvailableListener(mRawImageListener, mBackgroundHandler);
+            }
+
             try {
                 manager.openCamera(mCameraId, mStateCallback, mBackgroundHandler);
             } catch (SecurityException e) {
@@ -221,42 +247,78 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         }
     }
 
-    private final ImageReader.OnImageAvailableListener mOnImageAvailableListener = new ImageReader.OnImageAvailableListener() {
+    private final ImageReader.OnImageAvailableListener mJpegImageListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader reader) {
             Image image = null;
             try {
                 image = reader.acquireNextImage();
-                if (image != null) {
-                    saveImageToGallery(image);
-                }
-            } catch (Exception e) {
-                 Log.e(TAG, "Error capturando imagen: " + e.getMessage());
+                if (image != null) saveJpegToGallery(image);
             } finally {
                 if (image != null) image.close();
             }
         }
     };
 
-    private void saveImageToGallery(Image image) {
-        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-        
+    private final ImageReader.OnImageAvailableListener mRawImageListener = new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader reader) {
+            Image image = null;
+            try {
+                image = reader.acquireLatestImage();
+                if (image != null) {
+                    saveRawToGallery(image);
+                }
+            } finally {
+                if (image != null) image.close();
+            }
+        }
+    };
+
+    private void saveRawToGallery(Image image) {
+        TotalCaptureResult captureResult;
+        synchronized (mCameraStateLock) {
+            captureResult = mLastCaptureResult;
+        }
+
+        if (captureResult == null || mCameraChars == null) {
+            Log.e(TAG, "No se puede crear DNG: Falta metadatos de captura");
+            return;
+        }
+
         ContentValues values = new ContentValues();
-        values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRO_" + System.currentTimeMillis() + ".jpg");
-        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRO_" + System.currentTimeMillis() + ".dng");
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/x-adobe-dng");
         values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AstroCamera");
 
         Uri uri = getContext().getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
         if (uri == null) return;
 
         try (OutputStream output = getContext().getContentResolver().openOutputStream(uri);
-             WritableByteChannel channel = Channels.newChannel(output)) {
+             DngCreator dngCreator = new DngCreator(mCameraChars, captureResult)) {
             
-            channel.write(buffer);
-            Log.d(TAG, "Imagen guardada eficientemente: " + uri.toString());
+            dngCreator.writeImage(output, image);
+            Log.d(TAG, "RAW (DNG) guardado: " + uri.toString());
             
         } catch (IOException e) {
-            Log.e(TAG, "Error guardando imagen: " + e.getMessage());
+            Log.e(TAG, "Error RAW: " + e.getMessage());
+        }
+    }
+
+    // Actualización de takePicture para manejar DNG Creator
+    private void saveJpegToGallery(Image image) {
+        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRO_" + System.currentTimeMillis() + ".jpg");
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AstroCamera");
+        Uri uri = getContext().getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) return;
+        try (OutputStream output = getContext().getContentResolver().openOutputStream(uri);
+             WritableByteChannel channel = Channels.newChannel(output)) {
+            channel.write(buffer);
+        } catch (IOException e) {
+            Log.e(TAG, "Error JPEG: " + e.getMessage());
         }
     }
 
@@ -268,7 +330,6 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                 createCameraPreviewSession();
             }
         }
-
         @Override
         public void onDisconnected(@NonNull CameraDevice camera) {
             synchronized (mCameraStateLock) {
@@ -276,14 +337,12 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                 mCameraDevice = null;
             }
         }
-
         @Override
         public void onError(@NonNull CameraDevice camera, int error) {
             synchronized (mCameraStateLock) {
                 camera.close();
                 mCameraDevice = null;
             }
-            Log.e(TAG, "Error de cámara: " + error);
         }
     };
 
@@ -293,12 +352,16 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             assert texture != null;
             texture.setDefaultBufferSize(1920, 1080);
             Surface surface = new Surface(texture);
-            Surface readerSurface = mImageReader.getSurface();
+            
+            List<Surface> targets = new ArrayList<>();
+            targets.add(surface);
+            targets.add(mJpegReader.getSurface());
+            if (mRawReader != null) targets.add(mRawReader.getSurface());
 
             mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
             mPreviewRequestBuilder.addTarget(surface);
 
-            mCameraDevice.createCaptureSession(Arrays.asList(surface, readerSurface),
+            mCameraDevice.createCaptureSession(targets,
                 new CameraCaptureSession.StateCallback() {
                     @Override
                     public void onConfigured(@NonNull CameraCaptureSession session) {
@@ -308,15 +371,11 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                             updatePreview();
                         }
                     }
-
                     @Override
-                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                         Log.e(TAG, "Fallo configuración de sesión");
-                    }
+                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {}
                 }, mBackgroundHandler);
-
         } catch (CameraAccessException e) {
-            Log.e(TAG, "Error creando sesión: " + e.getMessage());
+            Log.e(TAG, "Error sesión: " + e.getMessage());
         }
     }
 
@@ -326,37 +385,28 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             try {
                 long MAX_PREVIEW_EXPOSURE_NS = 66_666_666L; 
                 long previewExposure = Math.min(mExposureNs, MAX_PREVIEW_EXPOSURE_NS);
-
+                
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
-                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                // Enfoque Manual en Preview
+                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
+                mPreviewRequestBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, mFocusDistance);
+                
                 mPreviewRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, mIso);
                 mPreviewRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, previewExposure);
                 mPreviewRequestBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, previewExposure);
-
                 mCaptureSession.setRepeatingRequest(mPreviewRequestBuilder.build(), null, mBackgroundHandler);
-
             } catch (CameraAccessException e) {
-                Log.e(TAG, "Error actualizando preview: " + e.getMessage());
-            } catch (IllegalStateException e) {
-                 Log.e(TAG, "Sesión cerrada prematuramente: " + e.getMessage());
+                Log.e(TAG, "Error preview: " + e.getMessage());
             }
         }
     }
 
     private void closeCamera() {
         synchronized (mCameraStateLock) {
-            if (mCaptureSession != null) {
-                mCaptureSession.close();
-                mCaptureSession = null;
-            }
-            if (mCameraDevice != null) {
-                mCameraDevice.close();
-                mCameraDevice = null;
-            }
-            if (mImageReader != null) {
-                mImageReader.close();
-                mImageReader = null;
-            }
+            if (mCaptureSession != null) { mCaptureSession.close(); mCaptureSession = null; }
+            if (mCameraDevice != null) { mCameraDevice.close(); mCameraDevice = null; }
+            if (mJpegReader != null) { mJpegReader.close(); mJpegReader = null; }
+            if (mRawReader != null) { mRawReader.close(); mRawReader = null; }
         }
         stopBackgroundThread();
     }
@@ -370,21 +420,13 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     private void stopBackgroundThread() {
         if (mBackgroundThread != null) {
             mBackgroundThread.quitSafely();
-            try {
-                mBackgroundThread.join();
-                mBackgroundThread = null;
-                mBackgroundHandler = null;
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            try { mBackgroundThread.join(); mBackgroundThread = null; mBackgroundHandler = null; } catch (InterruptedException e) {}
         }
     }
     
     static class CompareSizesByArea implements Comparator<Size> {
-        @Override
-        public int compare(Size lhs, Size rhs) {
-            return Long.signum((long) lhs.getWidth() * lhs.getHeight() -
-                    (long) rhs.getWidth() * rhs.getHeight());
+        @Override public int compare(Size lhs, Size rhs) {
+            return Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
         }
     }
 }

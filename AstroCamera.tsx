@@ -4,6 +4,7 @@ import { requireNativeComponent, ViewProps, UIManager, findNodeHandle } from 're
 interface AstroCameraProps extends ViewProps {
   iso: number;
   exposureSeconds: number;
+  focusDistance: number; // 0.0 = Infinito
 }
 
 export interface AstroCameraRef {
