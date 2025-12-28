@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, PermissionsAndroid, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, PermissionsAndroid, Platform, ActivityIndicator } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { AstroCamera, AstroCameraRef } from './AstroCamera'; // Importamos nuestro componente nativo
 
@@ -10,6 +10,7 @@ function App(): React.JSX.Element {
   const [timerDelay, setTimerDelay] = useState(0); // 0, 3, 10
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [count, setCount] = useState(0);
+  const [isCapturing, setIsCapturing] = useState(false);
   
   const [hasPermission, setHasPermission] = useState(false);
   const cameraRef = useRef<AstroCameraRef>(null);
@@ -51,7 +52,7 @@ function App(): React.JSX.Element {
   }, []);
 
   const handleCapture = () => {
-    if (isCountingDown) return;
+    if (isCountingDown || isCapturing) return;
 
     if (timerDelay === 0) {
       triggerCapture();
@@ -84,6 +85,19 @@ function App(): React.JSX.Element {
       console.warn('App: cameraRef.current es nulo');
     }
   };
+  
+  const onCaptureStarted = () => {
+    console.log("App: Captura iniciada por hardware");
+    setIsCapturing(true);
+  };
+
+  const onCaptureEnded = (event: any) => {
+    console.log("App: Captura finalizada", event.nativeEvent);
+    setIsCapturing(false);
+    if (!event.nativeEvent.success) {
+        Alert.alert("Error de captura", event.nativeEvent.error || "Error desconocido");
+    }
+  };
 
   const toggleTimer = () => {
     if (timerDelay === 0) setTimerDelay(3);
@@ -107,11 +121,20 @@ function App(): React.JSX.Element {
         iso={iso}
         exposureSeconds={shutter}
         focusDistance={focusDist}
+        onCaptureStarted={onCaptureStarted}
+        onCaptureEnded={onCaptureEnded}
       />
 
       {isCountingDown && (
         <View style={styles.countdownOverlay}>
           <Text style={styles.countdownText}>{count}</Text>
+        </View>
+      )}
+      
+      {isCapturing && (
+        <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#00ff00" />
+            <Text style={styles.loadingText}>Capturando...</Text>
         </View>
       )}
 
@@ -167,9 +190,9 @@ function App(): React.JSX.Element {
         </View>
 
         <TouchableOpacity 
-          style={[styles.captureButton, isCountingDown && {opacity: 0.5}]} 
+          style={[styles.captureButton, (isCountingDown || isCapturing) && {opacity: 0.5}]} 
           onPress={handleCapture}
-          disabled={isCountingDown}
+          disabled={isCountingDown || isCapturing}
         >
           <View style={styles.captureInner} />
         </TouchableOpacity>
@@ -202,7 +225,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     zIndex: 10
   },
-  countdownText: { fontSize: 100, color: 'white', fontWeight: 'bold' }
+  countdownText: { fontSize: 100, color: 'white', fontWeight: 'bold' },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    zIndex: 20
+  },
+  loadingText: { color: '#00ff00', marginTop: 10, fontWeight: 'bold' }
 });
 
 export default App;

@@ -30,6 +30,11 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.ReactContext;
+import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.uimanager.events.RCTEventEmitter;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -169,17 +174,27 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                         Log.d(TAG, "KERNEL: Captura completada. Timestamp: " + result.get(CaptureResult.SENSOR_TIMESTAMP));
                         handleCaptureResult(result);
                         scheduleUpdatePreview();
+                        
+                        WritableMap params = Arguments.createMap();
+                        params.putBoolean("success", true);
+                        sendEvent("topCaptureEnded", params);
                     }
                     
                     @Override
                     public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull android.hardware.camera2.CaptureFailure failure) {
                         Log.e(TAG, "KERNEL ERROR: Captura fallida. Reason: " + failure.getReason());
                         scheduleUpdatePreview();
+                        
+                        WritableMap params = Arguments.createMap();
+                        params.putBoolean("success", false);
+                        params.putString("error", "Capture failed: " + failure.getReason());
+                        sendEvent("topCaptureEnded", params);
                     }
                     
                     @Override
                     public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
                         Log.d(TAG, "KERNEL: Captura iniciada. Frame: " + frameNumber);
+                        sendEvent("topCaptureStarted", null);
                     }
                 };
 
@@ -510,6 +525,15 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         mBackgroundThread = new HandlerThread("CameraBackground");
         mBackgroundThread.start();
         mBackgroundHandler = new Handler(mBackgroundThread.getLooper());
+    }
+
+    private void sendEvent(String eventName, @Nullable WritableMap params) {
+        ReactContext reactContext = (ReactContext) getContext();
+        reactContext.getJSModule(RCTEventEmitter.class).receiveEvent(
+            getId(),
+            eventName,
+            params
+        );
     }
 
     private void stopBackgroundThread() {

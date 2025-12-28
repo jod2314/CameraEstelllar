@@ -49,6 +49,14 @@ public class AstroCameraViewManager extends SimpleViewManager<AstroCameraView> {
     }
 
     @Override
+    public Map getExportedCustomDirectEventTypeConstants() {
+        return MapBuilder.builder()
+            .put("topCaptureStarted", MapBuilder.of("registrationName", "onCaptureStarted"))
+            .put("topCaptureEnded", MapBuilder.of("registrationName", "onCaptureEnded"))
+            .build();
+    }
+
+    @Override
     public void receiveCommand(@NonNull AstroCameraView root, String commandId, @Nullable ReadableArray args) {
         Log.d(REACT_CLASS, "Comando recibido: " + commandId);
         

@@ -5,6 +5,8 @@ interface AstroCameraProps extends ViewProps {
   iso: number;
   exposureSeconds: number;
   focusDistance: number; // 0.0 = Infinito
+  onCaptureStarted?: () => void;
+  onCaptureEnded?: (event: { nativeEvent: { success: boolean; error?: string } }) => void;
 }
 
 export interface AstroCameraRef {
@@ -16,6 +18,18 @@ const NativeCamera = requireNativeComponent<AstroCameraProps>('AstroCameraView')
 export const AstroCamera = forwardRef<AstroCameraRef, AstroCameraProps>((props, ref) => {
   const nativeRef = useRef(null);
 
+  const onCaptureStarted = () => {
+    if (props.onCaptureStarted) {
+      props.onCaptureStarted();
+    }
+  };
+
+  const onCaptureEnded = (event: any) => {
+    if (props.onCaptureEnded) {
+      props.onCaptureEnded(event);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
     takePicture: () => {
       console.log('AstroCamera: Intentando disparar...');
@@ -24,7 +38,7 @@ export const AstroCamera = forwardRef<AstroCameraRef, AstroCameraProps>((props, 
         console.log('AstroCamera: Handle encontrado, enviando comando takePicture');
         UIManager.dispatchViewManagerCommand(
           handle,
-          'takePicture', // Usamos el nombre del comando directamente por claridad
+          'takePicture', 
           []
         );
       } else {
@@ -33,5 +47,12 @@ export const AstroCamera = forwardRef<AstroCameraRef, AstroCameraProps>((props, 
     },
   }));
 
-  return <NativeCamera ref={nativeRef} {...props} />;
+  return (
+    <NativeCamera 
+      ref={nativeRef} 
+      {...props} 
+      onCaptureStarted={onCaptureStarted}
+      onCaptureEnded={onCaptureEnded}
+    />
+  );
 });
