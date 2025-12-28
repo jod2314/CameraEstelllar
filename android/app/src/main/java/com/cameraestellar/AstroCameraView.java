@@ -340,7 +340,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             long timestamp = image.getTimestamp();
             TotalCaptureResult result = mPendingCaptureResults.remove(timestamp);
             
-            if (largestRawSize != null) {
+            if (result != null) {
                 Log.d(TAG, "Sincronización exitosa (Imagen llegó última). Guardando RAW...");
                 saveRawToGallery(image, result);
             } else {

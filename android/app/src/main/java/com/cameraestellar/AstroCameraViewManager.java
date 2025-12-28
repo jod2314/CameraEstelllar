@@ -2,6 +2,7 @@ package com.cameraestellar;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import android.util.Log;
 
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.common.MapBuilder;
