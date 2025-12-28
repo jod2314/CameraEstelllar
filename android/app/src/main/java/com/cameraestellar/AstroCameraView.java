@@ -157,6 +157,10 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                 captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
                 captureBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, mFocusDistance);
 
+                // Desactivar estabilización para evitar conflictos de timestamp (IS_ALGO errors)
+                captureBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+                captureBuilder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF);
+
                 captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 90);
                 
                 CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
@@ -471,6 +475,10 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                 mPreviewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
                 mPreviewRequestBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, mFocusDistance);
                 
+                // Desactivar estabilización en preview también
+                mPreviewRequestBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+                mPreviewRequestBuilder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF);
+
                 mPreviewRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso);
                 mPreviewRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedPreviewExposure);
                 mPreviewRequestBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, clampedPreviewExposure);
