@@ -52,3 +52,4 @@ El objetivo es transicionar de una herramienta de captura a un sistema de proces
 - **Gradle:** 8.13.
 - **SDK Android:** API 36 (Android 15).
 - **Dispositivo:** Físico detectado y funcional.
+- **Idioma de Interacción:** ESPAÑOL (Mandatorio para toda comunicación con el usuario).

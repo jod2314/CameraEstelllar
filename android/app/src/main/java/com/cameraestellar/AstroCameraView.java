@@ -60,7 +60,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     private android.util.Range<Integer> mIsoRange;
     private android.util.Range<Long> mExposureRange;
     
-    // Race condition handling for RAW (DNG)
+    // Manejo de condición de carrera para RAW (DNG)
     private final Map<Long, Image> mPendingRawImages = new ConcurrentHashMap<>();
     private final Map<Long, TotalCaptureResult> mPendingCaptureResults = new ConcurrentHashMap<>();
 
@@ -72,7 +72,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     private long mExposureNs = 100000000L; 
     private float mFocusDistance = 0.0f; // 0.0 = Infinito (Default para Astro)
     
-    // Debounce Runnable
+    // Tarea de actualización con Debounce
     private final Runnable mUpdatePreviewTask = new Runnable() {
         @Override
         public void run() {
@@ -340,7 +340,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             long timestamp = image.getTimestamp();
             TotalCaptureResult result = mPendingCaptureResults.remove(timestamp);
             
-            if (result != null) {
+            if (largestRawSize != null) {
                 Log.d(TAG, "Sincronización exitosa (Imagen llegó última). Guardando RAW...");
                 saveRawToGallery(image, result);
             } else {
@@ -460,7 +460,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         synchronized (mCameraStateLock) {
             if (mCaptureSession == null) return;
             try {
-                // Limit preview exposure to avoid lag (e.g., 1/15s max)
+                // Limitar la exposición de la vista previa para evitar lag (ej. máximo 1/15s)
                 long MAX_PREVIEW_EXPOSURE_NS = 66_666_666L; 
                 long previewExposure = Math.min(mExposureNs, MAX_PREVIEW_EXPOSURE_NS);
                 
@@ -476,7 +476,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
                 mPreviewRequestBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, clampedPreviewExposure);
                 mCaptureSession.setRepeatingRequest(mPreviewRequestBuilder.build(), null, mBackgroundHandler);
             } catch (CameraAccessException e) {
-                Log.e(TAG, "Error preview: " + e.getMessage());
+                Log.e(TAG, "Error en vista previa: " + e.getMessage());
             }
         }
     }
@@ -488,7 +488,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             if (mJpegReader != null) { mJpegReader.close(); mJpegReader = null; }
             if (mRawReader != null) { mRawReader.close(); mRawReader = null; }
             
-            // Clean up pending
+            // Limpiar pendientes
             for (Image img : mPendingRawImages.values()) {
                 img.close();
             }
