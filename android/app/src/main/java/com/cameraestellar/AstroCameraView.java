@@ -334,7 +334,7 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         @Override
         public void onImageAvailable(ImageReader reader) {
             Log.d(TAG, "RAW disponible en buffer.");
-            Image image = reader.acquireNextImage(); // Use acquireNextImage for consistency
+            Image image = reader.acquireNextImage(); 
             if (image == null) return;
             
             long timestamp = image.getTimestamp();
@@ -349,10 +349,113 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
             }
         }
     };
-    
-    // ... (saveRawToGallery and saveJpegToGallery methods) ...
 
-    // Actualizamos updatePreview para usar clamping
+    private void saveRawToGallery(Image image, TotalCaptureResult result) {
+        try {
+            if (mCameraChars == null) return;
+            
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRO_" + System.currentTimeMillis() + ".dng");
+            values.put(MediaStore.Images.Media.MIME_TYPE, "image/x-adobe-dng");
+            values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AstroCamera");
+
+            Uri uri = getContext().getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                Log.e(TAG, "Error al crear URI para DNG");
+                return;
+            }
+
+            try (OutputStream output = getContext().getContentResolver().openOutputStream(uri);
+                 DngCreator dngCreator = new DngCreator(mCameraChars, result)) {
+                
+                dngCreator.writeImage(output, image);
+                Log.d(TAG, "RAW (DNG) guardado: " + uri.toString());
+                
+            } catch (IOException e) {
+                Log.e(TAG, "Error escritura RAW: " + e.getMessage());
+            }
+        } finally {
+            image.close();
+        }
+    }
+
+    private void saveJpegToGallery(Image image) {
+        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, "ASTRO_" + System.currentTimeMillis() + ".jpg");
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/AstroCamera");
+        Uri uri = getContext().getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) return;
+        try (OutputStream output = getContext().getContentResolver().openOutputStream(uri);
+             WritableByteChannel channel = Channels.newChannel(output)) {
+            channel.write(buffer);
+            Log.d(TAG, "JPEG guardado: " + uri.toString());
+        } catch (IOException e) {
+            Log.e(TAG, "Error JPEG: " + e.getMessage());
+        }
+    }
+
+    private final CameraDevice.StateCallback mStateCallback = new CameraDevice.StateCallback() {
+        @Override
+        public void onOpened(@NonNull CameraDevice camera) {
+            synchronized (mCameraStateLock) {
+                mCameraDevice = camera;
+                createCameraPreviewSession();
+            }
+        }
+        @Override
+        public void onDisconnected(@NonNull CameraDevice camera) {
+            synchronized (mCameraStateLock) {
+                camera.close();
+                mCameraDevice = null;
+            }
+        }
+        @Override
+        public void onError(@NonNull CameraDevice camera, int error) {
+            synchronized (mCameraStateLock) {
+                camera.close();
+                mCameraDevice = null;
+                Log.e(TAG, "Camera Device Error: " + error);
+            }
+        }
+    };
+
+    private void createCameraPreviewSession() {
+        try {
+            SurfaceTexture texture = mTextureView.getSurfaceTexture();
+            assert texture != null;
+            texture.setDefaultBufferSize(1920, 1080);
+            Surface surface = new Surface(texture);
+            
+            List<Surface> targets = new ArrayList<>();
+            targets.add(surface);
+            targets.add(mJpegReader.getSurface());
+            if (mRawReader != null) targets.add(mRawReader.getSurface());
+
+            mPreviewRequestBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            mPreviewRequestBuilder.addTarget(surface);
+
+            mCameraDevice.createCaptureSession(targets,
+                new CameraCaptureSession.StateCallback() {
+                    @Override
+                    public void onConfigured(@NonNull CameraCaptureSession session) {
+                        synchronized (mCameraStateLock) {
+                            if (mCameraDevice == null) return;
+                            mCaptureSession = session;
+                            updatePreview();
+                        }
+                    }
+                    @Override
+                    public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                         Log.e(TAG, "Fallo al configurar sesión de captura");
+                    }
+                }, mBackgroundHandler);
+        } catch (CameraAccessException e) {
+            Log.e(TAG, "Error sesión: " + e.getMessage());
+        }
+    }
+
     private void updatePreview() {
         synchronized (mCameraStateLock) {
             if (mCaptureSession == null) return;
