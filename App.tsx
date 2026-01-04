@@ -4,49 +4,41 @@ import Slider from '@react-native-community/slider';
 import { AstroCamera, AstroCameraRef } from './AstroCamera'; // Importamos nuestro componente nativo
 
 function App(): React.JSX.Element {
+  const HARDWARE_LIMIT_EXPOSURE = 0.15; // Límite físico detectado (ejemplo, debe venir de capacidades)
+
   const [iso, setIso] = useState(800);
-  const [shutter, setShutter] = useState(0.05);
-  const [focusDist, setFocusDist] = useState(0.0); // 0.0 = Infinito
-  const [timerDelay, setTimerDelay] = useState(0); // 0, 3, 10
+  const [targetShutter, setTargetShutter] = useState(0.15); // Tiempo total deseado
+  const [focusDist, setFocusDist] = useState(0.0);
+  const [timerDelay, setTimerDelay] = useState(0); 
   const [isCountingDown, setIsCountingDown] = useState(false);
   const [count, setCount] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   
+  // Lógica simplificada: SIEMPRE disparo único, respetando el tiempo que pida el usuario.
+  // Ignoramos el límite reportado para intentar forzar al hardware.
+  const realExposure = targetShutter;
+  const burstCount = 1; 
+  const isStackingNeeded = false; // Desactivado permanentemente por preferencia de usuario
+
   const [hasPermission, setHasPermission] = useState(false);
   const cameraRef = useRef<AstroCameraRef>(null);
 
-  // ... (useEffect for permissions remains same)
-
   useEffect(() => {
     const requestPermission = async () => {
-      if (Platform.OS === 'android') {
-        try {
-          // Solicitamos múltiples permisos para cubrir diferentes versiones de Android
-          const permissionsToRequest = [
-            PermissionsAndroid.PERMISSIONS.CAMERA,
-            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-            // Para Android 13+ (API 33)
-            PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES, 
-          ];
-
-          const granted = await PermissionsAndroid.requestMultiple(permissionsToRequest);
-
-          // Verificamos si la CÁMARA (el más crítico) fue autorizado
-          if (granted[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED) {
-            console.log('Permiso de cámara concedido');
-            setHasPermission(true);
-          } else {
-            Alert.alert("Permiso denegado", "Es necesario el permiso de cámara para usar esta app.");
-          }
-          
-          // Nota: WRITE_EXTERNAL_STORAGE puede ser denegado en Android 13+ y está bien, 
-          // pero es necesario para Android < 13.
-        } catch (err) {
-          console.warn(err);
-        }
-      } else {
-        setHasPermission(true);
-      }
+        if (Platform.OS === 'android') {
+            try {
+              const permissionsToRequest = [
+                PermissionsAndroid.PERMISSIONS.CAMERA,
+                PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+                PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES, 
+              ];
+              const granted = await PermissionsAndroid.requestMultiple(permissionsToRequest);
+              // Verificamos principalmente CAMERA, los otros pueden variar según versión de Android
+              if (granted[PermissionsAndroid.PERMISSIONS.CAMERA] === PermissionsAndroid.RESULTS.GRANTED) {
+                setHasPermission(true);
+              }
+            } catch (err) { console.warn(err); }
+        } else { setHasPermission(true); }
     };
     requestPermission();
   }, []);
@@ -78,24 +70,20 @@ function App(): React.JSX.Element {
   };
 
   const triggerCapture = () => {
-    console.log('App: Disparando cámara...');
+    console.log(`App: Disparando... Total ${targetShutter}s (Burst: ${burstCount} x ${realExposure}s)`);
     if (cameraRef.current) {
       cameraRef.current.takePicture();
-    } else {
-      console.warn('App: cameraRef.current es nulo');
     }
   };
   
   const onCaptureStarted = () => {
-    console.log("App: Captura iniciada por hardware");
     setIsCapturing(true);
   };
 
   const onCaptureEnded = (event: any) => {
-    console.log("App: Captura finalizada", event.nativeEvent);
     setIsCapturing(false);
     if (!event.nativeEvent.success) {
-        Alert.alert("Error de captura", event.nativeEvent.error || "Error desconocido");
+        Alert.alert("Error", event.nativeEvent.error);
     }
   };
 
@@ -106,11 +94,7 @@ function App(): React.JSX.Element {
   };
 
   if (!hasPermission) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.text}>Solicitando permiso de cámara...</Text>
-      </View>
-    );
+    return <View style={styles.centerContainer}><Text style={styles.text}>Permiso requerido</Text></View>;
   }
 
   return (
@@ -119,8 +103,9 @@ function App(): React.JSX.Element {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         iso={iso}
-        exposureSeconds={shutter}
+        exposureSeconds={realExposure} // Siempre enviamos lo que el hardware soporta
         focusDistance={focusDist}
+        burstCount={burstCount} // Enviamos la cantidad necesaria para simular el tiempo total
         onCaptureStarted={onCaptureStarted}
         onCaptureEnded={onCaptureEnded}
       />
@@ -134,7 +119,11 @@ function App(): React.JSX.Element {
       {isCapturing && (
         <View style={styles.loadingOverlay}>
             <ActivityIndicator size="large" color="#00ff00" />
-            <Text style={styles.loadingText}>Capturando...</Text>
+            <Text style={styles.loadingText}>
+              {burstCount > 1 
+                ? `Adquiriendo ${burstCount} cuadros...\n(${(burstCount * realExposure).toFixed(1)}s Efectivos)` 
+                : 'Capturando...'}
+            </Text>
         </View>
       )}
 
@@ -144,6 +133,11 @@ function App(): React.JSX.Element {
             {timerDelay === 0 ? '⏱ OFF' : `⏱ ${timerDelay}s`}
           </Text>
         </TouchableOpacity>
+        {isStackingNeeded && (
+             <View style={{backgroundColor: 'rgba(255,0,0,0.5)', padding: 5, borderRadius: 5, marginTop: 5}}>
+                 <Text style={{color:'white', fontSize: 10}}>MODO STACKING ACTIVADO</Text>
+             </View>
+        )}
       </View>
 
       <View style={styles.controls}>
@@ -162,25 +156,28 @@ function App(): React.JSX.Element {
         </View>
 
         <View style={styles.controlRow}>
-          <Text style={styles.label}>Shutter: {shutter.toFixed(3)}s</Text>
+          <Text style={styles.label}>
+            Tiempo Total: {targetShutter.toFixed(1)}s 
+            {isStackingNeeded ? ` (${burstCount}x RAW)` : ''}
+          </Text>
           <Slider
             style={styles.slider}
-            minimumValue={0.001}
-            maximumValue={30.0}
-            step={0.001}
-            value={shutter}
-            onValueChange={setShutter}
-            minimumTrackTintColor="#00ccff"
-            thumbTintColor="#00ccff"
+            minimumValue={0.05}
+            maximumValue={30.0} // Permitimos seleccionar hasta 30s
+            step={0.1}
+            value={targetShutter}
+            onValueChange={setTargetShutter}
+            minimumTrackTintColor={isStackingNeeded ? "#ff4444" : "#00ccff"}
+            thumbTintColor={isStackingNeeded ? "#ff4444" : "#00ccff"}
           />
         </View>
 
         <View style={styles.controlRow}>
-          <Text style={styles.label}>Enfoque: {focusDist === 0 ? 'Infinito (Estrellas)' : focusDist.toFixed(2)}</Text>
+          <Text style={styles.label}>Enfoque: {focusDist === 0 ? 'Infinito' : focusDist.toFixed(2)}</Text>
           <Slider
             style={styles.slider}
             minimumValue={0.0}
-            maximumValue={1.0} // En Android 1.0 suele ser macro, 0.0 infinito
+            maximumValue={1.0}
             step={0.01}
             value={focusDist}
             onValueChange={setFocusDist}

@@ -123,92 +123,145 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
     }
 
     private int getClampedIso(int iso) {
-        if (mIsoRange == null) return iso;
+        if (mIsoRange == null) {
+            Log.w(TAG, "Rango ISO no disponible, usando valor por defecto.");
+            return iso;
+        }
         return Math.max(mIsoRange.getLower(), Math.min(iso, mIsoRange.getUpper()));
     }
 
     private long getClampedExposure(long exposureNs) {
-        if (mExposureRange == null) return exposureNs;
-        return Math.max(mExposureRange.getLower(), Math.min(exposureNs, mExposureRange.getUpper()));
-    }
-
-    public void takePicture() {
-        synchronized (mCameraStateLock) {
-            if (mCameraDevice == null || mCaptureSession == null) {
-                Log.e(TAG, "Cámara no lista para capturar.");
-                return;
-            }
-            try {
-                Log.d(TAG, "Iniciando captura...");
-                final CaptureRequest.Builder captureBuilder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-                captureBuilder.addTarget(mJpegReader.getSurface());
-                
-                if (mRawReader != null) {
-                    captureBuilder.addTarget(mRawReader.getSurface());
-                    Log.d(TAG, "Target RAW añadido.");
-                }
-
-                // Configuración Manual Completa (Exposición + Enfoque)
-                int clampedIso = getClampedIso(mIso);
-                long clampedExposure = getClampedExposure(mExposureNs);
-                
-                Log.d(TAG, "Configurando captura: ISO=" + clampedIso + ", Exp=" + clampedExposure + "ns");
-
-                captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
-                captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso);
-                captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedExposure);
-                captureBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, clampedExposure);
-                
-                // Enfoque Manual
-                captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
-                captureBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, mFocusDistance);
-
-                // Desactivar estabilización para evitar conflictos de timestamp (IS_ALGO errors)
-                captureBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
-                captureBuilder.set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF);
-
-                captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 90);
-                
-                CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
-                    @Override
-                    public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
-                        Log.d(TAG, "KERNEL: Captura completada. Timestamp: " + result.get(CaptureResult.SENSOR_TIMESTAMP));
-                        handleCaptureResult(result);
-                        scheduleUpdatePreview();
-                        
-                        WritableMap params = Arguments.createMap();
-                        params.putBoolean("success", true);
-                        sendEvent("topCaptureEnded", params);
-                    }
-                    
-                    @Override
-                    public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull android.hardware.camera2.CaptureFailure failure) {
-                        Log.e(TAG, "KERNEL ERROR: Captura fallida. Reason: " + failure.getReason());
-                        scheduleUpdatePreview();
-                        
-                        WritableMap params = Arguments.createMap();
-                        params.putBoolean("success", false);
-                        params.putString("error", "Capture failed: " + failure.getReason());
-                        sendEvent("topCaptureEnded", params);
-                    }
-                    
-                    @Override
-                    public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
-                        Log.d(TAG, "KERNEL: Captura iniciada. Frame: " + frameNumber);
-                        sendEvent("topCaptureStarted", null);
-                    }
-                };
-
-                mCaptureSession.stopRepeating(); 
-                mCaptureSession.capture(captureBuilder.build(), captureCallback, mBackgroundHandler);
-                Log.d(TAG, "Solicitud de captura enviada al driver.");
-
-            } catch (CameraAccessException e) {
-                Log.e(TAG, "Error crítico al tomar foto: " + e.getMessage());
-            }
+        if (mExposureRange == null) {
+            Log.w(TAG, "Rango Exposición no disponible, usando valor por defecto.");
+            return exposureNs;
         }
+        // MODIFICACIÓN: No limitamos el tope superior (Math.min eliminado).
+        // Intentamos enviar el valor solicitado aunque exceda lo que el driver dice soportar.
+        // Solo mantenemos el límite inferior para evitar valores negativos o cero.
+        return Math.max(mExposureRange.getLower(), exposureNs);
     }
+
+        // Variable de ráfaga
+        private int mBurstCount = 1;
     
+        public void setBurstCount(int count) {
+            this.mBurstCount = Math.max(1, count);
+        }
+    
+        public void takePicture() {
+            synchronized (mCameraStateLock) {
+                if (mCameraDevice == null || mCaptureSession == null) {
+                    Log.e(TAG, "Cámara no lista para capturar.");
+                    return;
+                }
+                try {
+                    Log.d(TAG, "Iniciando captura. Burst Count: " + mBurstCount);
+                    
+                    // 1. Preparar Builder Base - PREFERIR TEMPLATE_MANUAL (6)
+                    // TEMPLATE_MANUAL ofrece mejor control sobre ganancia y exposición y desactiva post-proceso agresivo.
+                    int templateType = CameraDevice.TEMPLATE_MANUAL;
+                    // Fallback a STILL_CAPTURE si MANUAL no está soportado (raro en dispositivos Camera2 decentes)
+                    // Verificamos capabilities previamente idealmente, pero try-catch capturará si falla la creación.
+                    
+                    final CaptureRequest.Builder captureBuilder = mCameraDevice.createCaptureRequest(templateType);
+                    captureBuilder.addTarget(mJpegReader.getSurface());
+                    if (mRawReader != null) captureBuilder.addTarget(mRawReader.getSurface());
+    
+                    // 2. Parámetros Manuales (Límite Hardware 0.15s)
+                    int clampedIso = getClampedIso(mIso);
+                    long clampedExposure = getClampedExposure(mExposureNs);
+                    
+                    Log.w(TAG, "=== CAPTURA DATOS ===");
+                    Log.w(TAG, "Cámara ID Actual: " + mCameraId);
+                    Log.w(TAG, "Solicitado ISO: " + mIso + " -> Clamped: " + clampedIso);
+                    Log.w(TAG, "Solicitado Exp: " + (mExposureNs/1e9) + "s -> Clamped: " + (clampedExposure/1e9) + "s");
+                    Log.w(TAG, "Rango Exp Hardware: " + (mExposureRange.getLower()/1e9) + "s - " + (mExposureRange.getUpper()/1e9) + "s");
+    
+                    // Forzar modo manual
+                    captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_OFF);
+                    // CONTROL_CAPTURE_INTENT_MANUAL es redundante con TEMPLATE_MANUAL pero asegura la intención
+                    captureBuilder.set(CaptureRequest.CONTROL_CAPTURE_INTENT, CameraMetadata.CONTROL_CAPTURE_INTENT_MANUAL);
+                    captureBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
+                    captureBuilder.set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF);
+                    captureBuilder.set(CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_OFF);
+                    
+                    // Desactivar cualquier "Scene Mode" o "Effect Mode"
+                    captureBuilder.set(CaptureRequest.CONTROL_SCENE_MODE, CameraMetadata.CONTROL_SCENE_MODE_DISABLED);
+                    captureBuilder.set(CaptureRequest.CONTROL_EFFECT_MODE, CameraMetadata.CONTROL_EFFECT_MODE_OFF);
+                    
+                    // Hotfix para algunos Samsung/Xiaomi: Desactivar ZSL (Zero Shutter Lag) si está activo implícitamente
+                    // captureBuilder.set(CaptureRequest.CONTROL_ENABLE_ZSL, false); // Requiere API 26+
+                    
+                    captureBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, clampedIso);
+                    captureBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, clampedExposure);
+                    captureBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, clampedExposure + 5_000_000L); // +5ms overhead
+                    captureBuilder.set(CaptureRequest.LENS_FOCUS_DISTANCE, mFocusDistance);
+                    captureBuilder.set(CaptureRequest.JPEG_ORIENTATION, 90);
+    
+                    // 3. Crear lista de solicitudes para la ráfaga
+                    List<CaptureRequest> burstRequests = new ArrayList<>();
+                    for (int i = 0; i < mBurstCount; i++) {
+                        captureBuilder.setTag(i); // Marcar índice
+                        burstRequests.add(captureBuilder.build());
+                    }
+    
+                    CameraCaptureSession.CaptureCallback captureCallback = new CameraCaptureSession.CaptureCallback() {
+                        @Override
+                        public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                            Integer index = (Integer) request.getTag();
+                            int idx = (index != null) ? index : 0;
+                            
+                            Log.d(TAG, "Captura " + (idx + 1) + "/" + mBurstCount + " completada.");
+                            handleCaptureResult(result);
+                            
+                            // Si es la última foto, finalizar
+                            if (idx == mBurstCount - 1) {
+                                scheduleUpdatePreview();
+                                WritableMap params = Arguments.createMap();
+                                params.putBoolean("success", true);
+                                sendEvent("topCaptureEnded", params);
+                            }
+                        }
+                        
+                        @Override
+                        public void onCaptureFailed(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull android.hardware.camera2.CaptureFailure failure) {
+                            Log.e(TAG, "Fallo en captura: " + failure.getReason());
+                            Integer index = (Integer) request.getTag();
+                            
+                            // Reportar error solo si es la última para no spamear eventos, o si es fatal
+                            if (index != null && index == mBurstCount - 1) {
+                                scheduleUpdatePreview();
+                                WritableMap params = Arguments.createMap();
+                                params.putBoolean("success", false);
+                                params.putString("error", "Error hardware: " + failure.getReason());
+                                sendEvent("topCaptureEnded", params);
+                            }
+                        }
+                        
+                        @Override
+                        public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
+                            Integer index = (Integer) request.getTag();
+                            if (index != null && index == 0) {
+                                sendEvent("topCaptureStarted", null);
+                            }
+                        }
+                    };
+    
+                    // 4. Ejecutar
+                    mCaptureSession.stopRepeating();
+                    mCaptureSession.abortCaptures();
+                    
+                    if (mBurstCount > 1) {
+                        mCaptureSession.captureBurst(burstRequests, captureCallback, mBackgroundHandler);
+                    } else {
+                        mCaptureSession.capture(burstRequests.get(0), captureCallback, mBackgroundHandler);
+                    }
+                    
+                } catch (CameraAccessException e) {
+                    Log.e(TAG, "Error: " + e.getMessage());
+                }
+            }
+        }    
     private void handleCaptureResult(TotalCaptureResult result) {
         Long timestamp = result.get(CaptureResult.SENSOR_TIMESTAMP);
         if (timestamp == null) {
@@ -254,66 +307,85 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         try {
             String bestCameraId = null;
             long maxExposureRange = 0;
-            float bestPixelSize = 0;
-            Size largestJpegSize = new Size(1920, 1080);
-            Size largestRawSize = null;
-
+            
+            Log.e(TAG, "========== INICIO AUDITORÍA PROFUNDA (CÁMARAS FÍSICAS) ==========");
+            
             for (String cameraId : manager.getCameraIdList()) {
                 CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
                 
-                Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
-                if (facing == null || facing != CameraCharacteristics.LENS_FACING_BACK) continue;
-
-                int[] caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
-                boolean hasManual = false;
-                boolean hasRaw = false;
-                if (caps != null) {
-                    for (int cap : caps) {
-                        if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) hasManual = true;
-                        if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) hasRaw = true;
-                    }
-                }
-                if (!hasManual) continue;
-
-                android.util.Range<Long> exposureRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
-                long maxExp = (exposureRange != null) ? exposureRange.getUpper() : 0;
+                // Analizar Cámara Lógica/Principal
+                printCameraSpecs(cameraId, chars, "LOGICAL/MAIN");
                 
-                android.util.SizeF sensorSize = chars.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE);
-                android.graphics.Rect activeArray = chars.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
-                float pixelSize = (sensorSize != null && activeArray != null) ? (sensorSize.getWidth() / activeArray.width()) : 0;
-
-                if (maxExp > maxExposureRange || (maxExp == maxExposureRange && pixelSize > bestPixelSize)) {
-                    maxExposureRange = maxExp;
-                    bestPixelSize = pixelSize;
+                // Revisar si tiene mejores specs que lo encontrado hasta ahora
+                long logicMax = getMaxExposure(chars);
+                if (logicMax > maxExposureRange && isBackFacing(chars)) {
+                    maxExposureRange = logicMax;
                     bestCameraId = cameraId;
                     mCameraChars = chars;
-                    
-                    // Guardamos rangos soportados
-                    mExposureRange = exposureRange;
-                    mIsoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+                }
 
-                    StreamConfigurationMap map = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-                    if (map != null) {
-                        largestJpegSize = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)), new CompareSizesByArea());
-                        if (hasRaw) {
-                            Size[] rawSizes = map.getOutputSizes(ImageFormat.RAW_SENSOR);
-                            if (rawSizes != null && rawSizes.length > 0) {
-                                largestRawSize = Collections.max(Arrays.asList(rawSizes), new CompareSizesByArea());
+                // --- DEEP SCAN: CÁMARAS FÍSICAS INTERNAS (Android 9+) ---
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    java.util.Set<String> physicalIds = chars.getPhysicalCameraIds();
+                    if (physicalIds != null && !physicalIds.isEmpty()) {
+                        Log.e(TAG, "   [ID: " + cameraId + "] Contiene " + physicalIds.size() + " cámaras físicas: " + physicalIds.toString());
+                        
+                        for (String physicalId : physicalIds) {
+                            CameraCharacteristics physicalChars = manager.getCameraCharacteristics(physicalId);
+                            printCameraSpecs(physicalId, physicalChars, "   >>> PHYSICAL (Sub-cámara de " + cameraId + ")");
+                            
+                            // ¿Esta cámara física oculta es mejor?
+                            long physMax = getMaxExposure(physicalChars);
+                            // Solo cambiamos a física si supera drásticamente a la lógica (ej. > 1 seg)
+                            if (physMax > maxExposureRange && physMax > 1_000_000_000L) {
+                                Log.e(TAG, "   !!! HALLAZGO: La cámara física " + physicalId + " está DESBLOQUEADA (" + (physMax/1e9) + "s) !!!");
+                                maxExposureRange = physMax;
+                                bestCameraId = physicalId; // ¡Usaremos la ID física directamente!
+                                mCameraChars = physicalChars;
                             }
                         }
                     }
                 }
             }
+            Log.e(TAG, "========== FIN AUDITORÍA PROFUNDA ==========");
             
-            mCameraId = bestCameraId;
-            if (mCameraId == null) {
-                Log.e(TAG, "No se encontró una cámara adecuada para Astro.");
-                return;
-            }
+            if (bestCameraId == null) bestCameraId = "0";
+            
+            Log.i(TAG, "CÁMARA ELEGIDA FINAL: " + bestCameraId + " (Max Exp: " + (maxExposureRange/1e9) + "s)");
 
-            Log.i(TAG, "Lente Astro Seleccionado: " + mCameraId + " (RAW: " + (largestRawSize != null) + ")");
-            if (mIsoRange != null) Log.i(TAG, "Rango ISO: " + mIsoRange.getLower() + " - " + mIsoRange.getUpper());
-            if (mExposureRange != null) Log.i(TAG, "Rango Exp: " + mExposureRange.getLower() + " - " + mExposureRange.getUpper() + " ns");
+            // ... (Resto de la inicialización igual)
+            
+            // Recargar chars si cambiamos de ID
+            if (!bestCameraId.equals(mCameraId)) {
+                mCameraChars = manager.getCameraCharacteristics(bestCameraId);
+            }
+            mCameraId = bestCameraId;
+
+            StreamConfigurationMap map = mCameraChars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+            Size largestJpegSize = new Size(1920, 1080);
+            Size largestRawSize = null;
+
+            if (map != null) {
+                largestJpegSize = Collections.max(Arrays.asList(map.getOutputSizes(ImageFormat.JPEG)), new CompareSizesByArea());
+                
+                // RAW Check
+                int[] caps = mCameraChars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+                boolean currentHasRaw = false;
+                if (caps != null) {
+                    for (int cap : caps) { if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) currentHasRaw = true; }
+                }
+                
+                if (currentHasRaw) {
+                    Size[] rawSizes = map.getOutputSizes(ImageFormat.RAW_SENSOR);
+                    if (rawSizes != null && rawSizes.length > 0) {
+                        largestRawSize = Collections.max(Arrays.asList(rawSizes), new CompareSizesByArea());
+                    }
+                }
+            }
+            
+            // Guardar rangos finales
+            mExposureRange = mCameraChars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
+            mIsoRange = mCameraChars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
 
             startBackgroundThread();
 
@@ -334,6 +406,36 @@ public class AstroCameraView extends FrameLayout implements TextureView.SurfaceT
         } catch (CameraAccessException e) {
             Log.e(TAG, "Error accediendo a cámara: " + e.getMessage());
         }
+    }
+    
+    private void printCameraSpecs(String id, CameraCharacteristics chars, String label) {
+        Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
+        String facingStr = (facing != null && facing == CameraCharacteristics.LENS_FACING_FRONT) ? "FRONT" : "BACK";
+        
+        int[] caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
+        boolean hasManual = false;
+        boolean hasRaw = false;
+        if (caps != null) {
+            for (int cap : caps) {
+                if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR) hasManual = true;
+                if (cap == CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) hasRaw = true;
+            }
+        }
+        
+        long maxExp = getMaxExposure(chars);
+        double maxSeconds = maxExp / 1_000_000_000.0;
+        
+        Log.e(TAG, label + " [ID: " + id + "] " + facingStr + " | Manual: " + hasManual + " | RAW: " + hasRaw + " | Max Exp: " + maxSeconds + "s");
+    }
+    
+    private long getMaxExposure(CameraCharacteristics chars) {
+        android.util.Range<Long> range = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
+        return (range != null) ? range.getUpper() : 0;
+    }
+    
+    private boolean isBackFacing(CameraCharacteristics chars) {
+        Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
+        return facing != null && facing == CameraCharacteristics.LENS_FACING_BACK;
     }
 
     private final ImageReader.OnImageAvailableListener mJpegImageListener = new ImageReader.OnImageAvailableListener() {

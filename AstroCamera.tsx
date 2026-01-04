@@ -5,6 +5,7 @@ interface AstroCameraProps extends ViewProps {
   iso: number;
   exposureSeconds: number;
   focusDistance: number; // 0.0 = Infinito
+  burstCount?: number;
   onCaptureStarted?: () => void;
   onCaptureEnded?: (event: { nativeEvent: { success: boolean; error?: string } }) => void;
 }

@@ -42,52 +42,77 @@ public class AstroCameraModule extends ReactContextBaseJavaModule {
         try {
             for (String cameraId : manager.getCameraIdList()) {
                 CameraCharacteristics chars = manager.getCameraCharacteristics(cameraId);
-                Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
-
-                // Solo nos interesa la cámara trasera (LENS_FACING_BACK = 1)
-                if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
-                    WritableMap camInfo = Arguments.createMap();
-                    camInfo.putString("id", cameraId);
-
-                    // 1. Nivel de Hardware
-                    Integer level = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
-                    camInfo.putString("hardwareLevel", getLevelString(level));
-
-                    // 2. Rango ISO
-                    Range<Integer> isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
-                    if (isoRange != null) {
-                        camInfo.putInt("minIso", isoRange.getLower());
-                        camInfo.putInt("maxIso", isoRange.getUpper());
-                    }
-
-                    // 3. Rango Shutter (Exposición) en Nanosegundos
-                    Range<Long> timeRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
-                    if (timeRange != null) {
-                        camInfo.putDouble("minShutterSec", timeRange.getLower() / 1_000_000_000.0);
-                        camInfo.putDouble("maxShutterSec", timeRange.getUpper() / 1_000_000_000.0);
-                    }
-
-                    // 4. Modos de Auto-Exposición Disponibles
-                    int[] aeModes = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
-                    boolean supportsManual = false;
-                    WritableArray modesArray = Arguments.createArray();
-                    if (aeModes != null) {
-                        for (int mode : aeModes) {
-                            modesArray.pushInt(mode);
-                            if (mode == CameraMetadata.CONTROL_AE_MODE_OFF) {
-                                supportsManual = true;
-                            }
-                        }
-                    }
-                    camInfo.putArray("aeModes", modesArray);
-                    camInfo.putBoolean("supportsManualExposure", supportsManual);
-
-                    camerasArray.pushMap(camInfo);
-                }
+                
+                // Procesar la cámara lógica/principal
+                processCamera(cameraId, chars, manager, camerasArray, false);
             }
             promise.resolve(camerasArray);
         } catch (CameraAccessException e) {
             promise.reject("CAMERA_ERROR", e.getMessage());
+        }
+    }
+
+    private void processCamera(String id, CameraCharacteristics chars, CameraManager manager, WritableArray camerasArray, boolean isPhysical) {
+        Integer facing = chars.get(CameraCharacteristics.LENS_FACING);
+        
+        // Filtrar por LENS_FACING_BACK si es cámara lógica, o si es física (asumimos que hereda dirección o verificamos)
+        // Nota: Algunas físicas pueden no tener facing definido, pero generalmente coinciden con la lógica.
+        if (facing != null && facing == CameraCharacteristics.LENS_FACING_BACK) {
+            
+            // Si es lógica y tiene físicas, procesamos las físicas TAMBIÉN (o en lugar de, dependiendo de la estrategia).
+            // Aquí elegimos reportar TODO para que el usuario/frontend decida.
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                java.util.Set<String> physicalIds = chars.getPhysicalCameraIds();
+                if (physicalIds != null && !physicalIds.isEmpty() && !isPhysical) {
+                    for (String physicalId : physicalIds) {
+                        try {
+                            CameraCharacteristics physChars = manager.getCameraCharacteristics(physicalId);
+                            processCamera(physicalId, physChars, manager, camerasArray, true);
+                        } catch (CameraAccessException e) {
+                            Log.e("AstroCameraModule", "Error leyendo física " + physicalId);
+                        }
+                    }
+                }
+            }
+
+            WritableMap camInfo = Arguments.createMap();
+            camInfo.putString("id", id);
+            camInfo.putBoolean("isPhysical", isPhysical);
+
+            // 1. Nivel de Hardware
+            Integer level = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
+            camInfo.putString("hardwareLevel", getLevelString(level));
+
+            // 2. Rango ISO
+            Range<Integer> isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+            if (isoRange != null) {
+                camInfo.putInt("minIso", isoRange.getLower());
+                camInfo.putInt("maxIso", isoRange.getUpper());
+            }
+
+            // 3. Rango Shutter (Exposición) en Nanosegundos
+            Range<Long> timeRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
+            if (timeRange != null) {
+                camInfo.putDouble("minShutterSec", timeRange.getLower() / 1_000_000_000.0);
+                camInfo.putDouble("maxShutterSec", timeRange.getUpper() / 1_000_000_000.0);
+            }
+
+            // 4. Modos de Auto-Exposición Disponibles
+            int[] aeModes = chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES);
+            boolean supportsManual = false;
+            WritableArray modesArray = Arguments.createArray();
+            if (aeModes != null) {
+                for (int mode : aeModes) {
+                    modesArray.pushInt(mode);
+                    if (mode == CameraMetadata.CONTROL_AE_MODE_OFF) {
+                        supportsManual = true;
+                    }
+                }
+            }
+            camInfo.putArray("aeModes", modesArray);
+            camInfo.putBoolean("supportsManualExposure", supportsManual);
+
+            camerasArray.pushMap(camInfo);
         }
     }
 

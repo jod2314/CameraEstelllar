@@ -41,6 +41,11 @@ public class AstroCameraViewManager extends SimpleViewManager<AstroCameraView> {
         view.setFocusDistance(distance);
     }
 
+    @ReactProp(name = "burstCount")
+    public void setBurstCount(AstroCameraView view, int count) {
+        view.setBurstCount(count);
+    }
+
     @Override
     public Map<String, Integer> getCommandsMap() {
         return MapBuilder.of(
