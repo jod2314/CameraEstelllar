@@ -16,32 +16,87 @@
         android:id="@+id/redFilter"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#80FF0000"
+        android:background="#60FF0000"
         android:visibility="visible" />
 
-    <!-- Controles Inferiores -->
+    <!-- Panel de Controles Profesionales -->
     <LinearLayout
+        android:id="@+id/controlsPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="#CC000000"
         android:orientation="vertical"
-        android:padding="16dp"
+        android:padding="20dp"
         app:layout_constraintBottom_toBottomOf="parent">
 
         <TextView
             android:id="@+id/statusText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Inicializando Cámara..."
-            android:textColor="#FFFFFF"
+            android:text="CameraStellar v3 - Listo"
+            android:textColor="#FF0000"
             android:textAlignment="center"
-            android:layout_marginBottom="16dp" />
+            android:textStyle="bold"
+            android:layout_marginBottom="20dp" />
+
+        <!-- Control de ISO -->
+        <TextView
+            android:id="@+id/isoLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="ISO: 800"
+            android:textColor="#FF0000" />
+        <SeekBar
+            android:id="@+id/isoSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="6400"
+            android:progress="800"
+            android:progressTint="#FF0000"
+            android:thumbTint="#FF0000" />
+
+        <!-- Control de Exposición -->
+        <TextView
+            android:id="@+id/exposureLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Exposición: 1.0s"
+            android:textColor="#FF0000"
+            android:layout_marginTop="10dp" />
+        <SeekBar
+            android:id="@+id/exposureSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="30"
+            android:progress="1"
+            android:progressTint="#FF0000"
+            android:thumbTint="#FF0000" />
+
+        <!-- Control de Ráfaga -->
+        <TextView
+            android:id="@+id/burstLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Fotos en Ráfaga: 1"
+            android:textColor="#FF0000"
+            android:layout_marginTop="10dp" />
+        <SeekBar
+            android:id="@+id/burstSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="50"
+            android:progress="1"
+            android:progressTint="#FF0000"
+            android:thumbTint="#FF0000" />
 
         <Button
             android:id="@+id/captureButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="Capturar"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginTop="20dp"
+            android:text="INICIAR CAPTURA ESTELAR"
+            android:textColor="#000000"
+            android:textStyle="bold"
             android:backgroundTint="#FF0000" />
     </LinearLayout>
 

@@ -115,19 +115,30 @@ class CameraController(private val context: Context) {
     }
 
     private fun startPreview(previewSurface: Surface) {
+        updatePreviewSettings(previewSurface)
+    }
+
+    /**
+     * Actualiza los parámetros de la cámara (ISO, Exp) en tiempo real para la vista previa.
+     */
+    fun updatePreviewSettings(previewSurface: Surface? = null) {
         try {
+            val surface = previewSurface ?: return // O usar la guardada si se implementa persistencia de surface
             val requestBuilder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
-            requestBuilder?.addTarget(previewSurface)
+            requestBuilder?.addTarget(surface)
             
-            // Bloqueo manual inicial
+            // Forzar parámetros manuales en la vista previa
             requestBuilder?.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             requestBuilder?.set(CaptureRequest.SENSOR_SENSITIVITY, currentIso)
-            requestBuilder?.set(CaptureRequest.SENSOR_EXPOSURE_TIME, currentExposureNs)
+            
+            // Limitamos la exposición de preview para que la pantalla no se congele si pones 30s
+            val previewExp = currentExposureNs.coerceAtMost(100_000_000L) // Máximo 0.1s para preview
+            requestBuilder?.set(CaptureRequest.SENSOR_EXPOSURE_TIME, previewExp)
             requestBuilder?.set(CaptureRequest.LENS_FOCUS_DISTANCE, currentFocusDistance)
 
             captureSession?.setRepeatingRequest(requestBuilder!!.build(), null, backgroundHandler)
-        } catch (e: CameraAccessException) {
-            Log.e(TAG, "Error en vista previa", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error actualizando configuración de preview", e)
         }
     }
 

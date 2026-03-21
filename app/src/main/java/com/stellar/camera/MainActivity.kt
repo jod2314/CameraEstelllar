@@ -36,12 +36,53 @@ class MainActivity : AppCompatActivity() {
         
         cameraController = CameraController(this)
 
+        setupUIControls()
+
         binding.captureButton.setOnClickListener {
-            cameraController.takeBurst(1) // Captura simple inicial
-            Toast.makeText(this, "Capturando RAW...", Toast.LENGTH_SHORT).show()
+            val burstCount = binding.burstSeekBar.progress.coerceAtLeast(1)
+            cameraController.takeBurst(burstCount)
+            Toast.makeText(this, "Capturando ráfaga de $burstCount RAWs...", Toast.LENGTH_SHORT).show()
         }
 
         checkPermissions()
+    }
+
+    private fun setupUIControls() {
+        // Control de ISO
+        binding.isoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                val isoValue = progress.coerceAtLeast(100)
+                binding.isoLabel.text = "ISO: $isoValue"
+                cameraController.currentIso = isoValue
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {
+                cameraController.updatePreviewSettings()
+            }
+        })
+
+        // Control de Exposición (en segundos)
+        binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                val seconds = progress.coerceAtLeast(1)
+                binding.exposureLabel.text = "Exposición: ${seconds}.0s"
+                cameraController.currentExposureNs = seconds * 1_000_000_000L
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {
+                cameraController.updatePreviewSettings()
+            }
+        })
+
+        // Control de Ráfaga
+        binding.burstSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
+                val count = progress.coerceAtLeast(1)
+                binding.burstLabel.text = "Fotos en Ráfaga: $count"
+            }
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
+        })
     }
 
     private fun checkPermissions() {
