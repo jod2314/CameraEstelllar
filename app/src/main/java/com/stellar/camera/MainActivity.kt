@@ -16,13 +16,14 @@ import com.stellar.camera.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private lateinit var cameraController: CameraController
     
     // Gestor de permisos reactivo
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         if (permissions[Manifest.permission.CAMERA] == true) {
-            setupCamera()
+            startCameraFlow()
         } else {
             Toast.makeText(this, R.string.permission_rationale, Toast.LENGTH_LONG).show()
         }
@@ -32,6 +33,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        
+        cameraController = CameraController(this)
+
+        binding.captureButton.setOnClickListener {
+            cameraController.takeBurst(1) // Captura simple inicial
+            Toast.makeText(this, "Capturando RAW...", Toast.LENGTH_SHORT).show()
+        }
 
         checkPermissions()
     }
@@ -47,24 +55,31 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (missingPermissions.isEmpty()) {
-            setupCamera()
+            startCameraFlow()
         } else {
             requestPermissionLauncher.launch(permissionsToRequest)
         }
     }
 
-    private fun setupCamera() {
-        binding.statusText.text = "Cámara Lista - Fase 1 Completada"
-        // TODO: En el Hito 1 inyectaremos el CameraController aquí
+    private fun startCameraFlow() {
+        cameraController.startBackgroundThread()
+        binding.statusText.text = "Cámara Iniciada - RAW Habilitado"
+        
+        // Esperar a que el SurfaceView esté listo
+        binding.cameraPreview.holder.addCallback(object : android.view.SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: android.view.SurfaceHolder) {
+                val manager = getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                cameraController.openCamera(manager, holder.surface)
+            }
+            override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {}
+            override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
+                cameraController.closeCamera()
+            }
+        })
     }
 
-    override fun onResume() {
-        super.onResume()
-        // El reinicio de cámara se manejará en el ViewModel en hitos posteriores
-    }
-
-    override fun onPause() {
-        super.onPause()
-        // La liberación de cámara se manejará en el ViewModel
+    override fun onDestroy() {
+        super.onDestroy()
+        cameraController.stopBackgroundThread()
     }
 }
