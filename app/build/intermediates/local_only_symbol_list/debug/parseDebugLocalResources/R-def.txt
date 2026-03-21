@@ -1,0 +1,17 @@
+R_DEF: Internal format may change without notice
+local
+id burstLabel
+id burstSeekBar
+id cameraPreview
+id captureButton
+id controlsPanel
+id exposureLabel
+id exposureSeekBar
+id isoLabel
+id isoSeekBar
+id redFilter
+id statusText
+layout activity_main
+string app_name
+string permission_rationale
+style Theme.CameraStellar

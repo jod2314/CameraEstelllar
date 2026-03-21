@@ -1,0 +1,183 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.stellar.camera"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="28"
+9        android:targetSdkVersion="34" />
+10
+11    <!-- Permisos de Cámara -->
+12    <uses-permission android:name="android.permission.CAMERA" />
+12-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:6:5-65
+12-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:6:22-62
+13
+14    <uses-feature
+14-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:7:5-84
+15        android:name="android.hardware.camera"
+15-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:7:19-57
+16        android:required="true" />
+16-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:7:58-81
+17    <uses-feature
+17-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:8:5-95
+18        android:name="android.hardware.camera.autofocus"
+18-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:8:19-67
+19        android:required="false" />
+19-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:8:68-92
+20    <uses-feature
+20-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:9:5-88
+21        android:name="android.hardware.camera.raw"
+21-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:9:19-61
+22        android:required="true" />
+22-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:9:62-85
+23
+24    <!-- Permisos de Ubicación (para metadatos astronómicos) -->
+25    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+25-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:12:5-79
+25-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:12:22-76
+26    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+26-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:13:5-81
+26-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:13:22-78
+27
+28    <permission
+28-->[androidx.core:core:1.12.0] C:\Users\jodac\.gradle\caches\8.13\transforms\077df947e625d0ec6927222820de6f71\transformed\core-1.12.0\AndroidManifest.xml:22:5-24:47
+29        android:name="com.stellar.camera.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+29-->[androidx.core:core:1.12.0] C:\Users\jodac\.gradle\caches\8.13\transforms\077df947e625d0ec6927222820de6f71\transformed\core-1.12.0\AndroidManifest.xml:23:9-81
+30        android:protectionLevel="signature" />
+30-->[androidx.core:core:1.12.0] C:\Users\jodac\.gradle\caches\8.13\transforms\077df947e625d0ec6927222820de6f71\transformed\core-1.12.0\AndroidManifest.xml:24:9-44
+31
+32    <uses-permission android:name="com.stellar.camera.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+32-->[androidx.core:core:1.12.0] C:\Users\jodac\.gradle\caches\8.13\transforms\077df947e625d0ec6927222820de6f71\transformed\core-1.12.0\AndroidManifest.xml:26:5-97
+32-->[androidx.core:core:1.12.0] C:\Users\jodac\.gradle\caches\8.13\transforms\077df947e625d0ec6927222820de6f71\transformed\core-1.12.0\AndroidManifest.xml:26:22-94
+33
+34    <application
+34-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:15:5-35:19
+35        android:allowBackup="true"
+35-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:16:9-35
+36        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+36-->[androidx.core:core:1.12.0] C:\Users\jodac\.gradle\caches\8.13\transforms\077df947e625d0ec6927222820de6f71\transformed\core-1.12.0\AndroidManifest.xml:28:18-86
+37        android:dataExtractionRules="@xml/data_extraction_rules"
+37-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:17:9-65
+38        android:debuggable="true"
+39        android:extractNativeLibs="false"
+40        android:fullBackupContent="@xml/backup_rules"
+40-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:18:9-54
+41        android:icon="@mipmap/ic_launcher"
+41-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:19:9-43
+42        android:label="@string/app_name"
+42-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:20:9-41
+43        android:roundIcon="@mipmap/ic_launcher_round"
+43-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:21:9-54
+44        android:supportsRtl="true"
+44-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:22:9-35
+45        android:testOnly="true"
+46        android:theme="@style/Theme.CameraStellar" >
+46-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:23:9-51
+47        <activity
+47-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:26:9-34:20
+48            android:name="com.stellar.camera.MainActivity"
+48-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:27:13-41
+49            android:exported="true"
+49-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:28:13-36
+50            android:screenOrientation="portrait" >
+50-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:29:13-49
+51            <intent-filter>
+51-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:30:13-33:29
+52                <action android:name="android.intent.action.MAIN" />
+52-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:31:17-69
+52-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:31:25-66
+53
+54                <category android:name="android.intent.category.LAUNCHER" />
+54-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:32:17-77
+54-->C:\camerastelllarv3\app\src\main\AndroidManifest.xml:32:27-74
+55            </intent-filter>
+56        </activity>
+57        <!--
+58        Service for holding metadata. Cannot be instantiated.
+59        Metadata will be merged from other manifests.
+60        -->
+61        <service
+61-->[androidx.camera:camera-core:1.3.1] C:\Users\jodac\.gradle\caches\8.13\transforms\13feeef06d27f572811aae071fb4cfdf\transformed\camera-core-1.3.1\AndroidManifest.xml:29:9-33:78
+62            android:name="androidx.camera.core.impl.MetadataHolderService"
+62-->[androidx.camera:camera-core:1.3.1] C:\Users\jodac\.gradle\caches\8.13\transforms\13feeef06d27f572811aae071fb4cfdf\transformed\camera-core-1.3.1\AndroidManifest.xml:30:13-75
+63            android:enabled="false"
+63-->[androidx.camera:camera-core:1.3.1] C:\Users\jodac\.gradle\caches\8.13\transforms\13feeef06d27f572811aae071fb4cfdf\transformed\camera-core-1.3.1\AndroidManifest.xml:31:13-36
+64            android:exported="false" >
+64-->[androidx.camera:camera-core:1.3.1] C:\Users\jodac\.gradle\caches\8.13\transforms\13feeef06d27f572811aae071fb4cfdf\transformed\camera-core-1.3.1\AndroidManifest.xml:32:13-37
+65            <meta-data
+65-->[androidx.camera:camera-camera2:1.3.1] C:\Users\jodac\.gradle\caches\8.13\transforms\80cff905694465f0517a87d3af1df6d7\transformed\camera-camera2-1.3.1\AndroidManifest.xml:30:13-32:89
+66                android:name="androidx.camera.core.impl.MetadataHolderService.DEFAULT_CONFIG_PROVIDER"
+66-->[androidx.camera:camera-camera2:1.3.1] C:\Users\jodac\.gradle\caches\8.13\transforms\80cff905694465f0517a87d3af1df6d7\transformed\camera-camera2-1.3.1\AndroidManifest.xml:31:17-103
+67                android:value="androidx.camera.camera2.Camera2Config$DefaultProvider" />
+67-->[androidx.camera:camera-camera2:1.3.1] C:\Users\jodac\.gradle\caches\8.13\transforms\80cff905694465f0517a87d3af1df6d7\transformed\camera-camera2-1.3.1\AndroidManifest.xml:32:17-86
+68        </service>
+69
+70        <provider
+70-->[androidx.emoji2:emoji2:1.2.0] C:\Users\jodac\.gradle\caches\8.13\transforms\320996a429203b922d853484968f2748\transformed\emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+71            android:name="androidx.startup.InitializationProvider"
+71-->[androidx.emoji2:emoji2:1.2.0] C:\Users\jodac\.gradle\caches\8.13\transforms\320996a429203b922d853484968f2748\transformed\emoji2-1.2.0\AndroidManifest.xml:25:13-67
+72            android:authorities="com.stellar.camera.androidx-startup"
+72-->[androidx.emoji2:emoji2:1.2.0] C:\Users\jodac\.gradle\caches\8.13\transforms\320996a429203b922d853484968f2748\transformed\emoji2-1.2.0\AndroidManifest.xml:26:13-68
+73            android:exported="false" >
+73-->[androidx.emoji2:emoji2:1.2.0] C:\Users\jodac\.gradle\caches\8.13\transforms\320996a429203b922d853484968f2748\transformed\emoji2-1.2.0\AndroidManifest.xml:27:13-37
+74            <meta-data
+74-->[androidx.emoji2:emoji2:1.2.0] C:\Users\jodac\.gradle\caches\8.13\transforms\320996a429203b922d853484968f2748\transformed\emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+75                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+75-->[androidx.emoji2:emoji2:1.2.0] C:\Users\jodac\.gradle\caches\8.13\transforms\320996a429203b922d853484968f2748\transformed\emoji2-1.2.0\AndroidManifest.xml:30:17-75
+76                android:value="androidx.startup" />
+76-->[androidx.emoji2:emoji2:1.2.0] C:\Users\jodac\.gradle\caches\8.13\transforms\320996a429203b922d853484968f2748\transformed\emoji2-1.2.0\AndroidManifest.xml:31:17-49
+77            <meta-data
+77-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\jodac\.gradle\caches\8.13\transforms\dea38af7e165f979b9280ca9502d0706\transformed\lifecycle-process-2.7.0\AndroidManifest.xml:29:13-31:52
+78                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+78-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\jodac\.gradle\caches\8.13\transforms\dea38af7e165f979b9280ca9502d0706\transformed\lifecycle-process-2.7.0\AndroidManifest.xml:30:17-78
+79                android:value="androidx.startup" />
+79-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\jodac\.gradle\caches\8.13\transforms\dea38af7e165f979b9280ca9502d0706\transformed\lifecycle-process-2.7.0\AndroidManifest.xml:31:17-49
+80            <meta-data
+80-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:29:13-31:52
+81                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+81-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:30:17-85
+82                android:value="androidx.startup" />
+82-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:31:17-49
+83        </provider>
+84
+85        <receiver
+85-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:34:9-52:20
+86            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+86-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:35:13-76
+87            android:directBootAware="false"
+87-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:36:13-44
+88            android:enabled="true"
+88-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:37:13-35
+89            android:exported="true"
+89-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:38:13-36
+90            android:permission="android.permission.DUMP" >
+90-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:39:13-57
+91            <intent-filter>
+91-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:40:13-42:29
+92                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+92-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:41:17-91
+92-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:41:25-88
+93            </intent-filter>
+94            <intent-filter>
+94-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:43:13-45:29
+95                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+95-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:44:17-85
+95-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:44:25-82
+96            </intent-filter>
+97            <intent-filter>
+97-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:46:13-48:29
+98                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+98-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:47:17-88
+98-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:47:25-85
+99            </intent-filter>
+100            <intent-filter>
+100-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:49:13-51:29
+101                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+101-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:50:17-95
+101-->[androidx.profileinstaller:profileinstaller:1.3.0] C:\Users\jodac\.gradle\caches\8.13\transforms\d020308d6d24858ba47c2326b4845786\transformed\profileinstaller-1.3.0\AndroidManifest.xml:50:25-92
+102            </intent-filter>
+103        </receiver>
+104    </application>
+105
+106</manifest>
