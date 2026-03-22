@@ -2,15 +2,21 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Permisos de Cámara -->
+    <!-- Permisos de Cámara y Sensores -->
     <uses-permission android:name="android.permission.CAMERA" />
+    
+    <!-- Características de Hardware Obligatorias (Filtro de Google Play) -->
     <uses-feature android:name="android.hardware.camera" android:required="true" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.any" android:required="true" />
     <uses-feature android:name="android.hardware.camera.raw" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.level.full" android:required="false" />
 
-    <!-- Permisos de Ubicación (para metadatos astronómicos) -->
+    <!-- Permisos de Ubicación (Metadatos Astronómicos) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
+    <!-- Evitar que la ráfaga sea interrumpida por el ahorro de energía -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:allowBackup="true"
@@ -21,12 +27,13 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.CameraStellar"
-        tools:targetApi="31">
+        tools:targetApi="35">
         
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:screenOrientation="portrait">
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

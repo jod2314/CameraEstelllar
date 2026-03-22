@@ -4,7 +4,7 @@
             "outputFile": "com.stellar.camera.app-mergeDebugResources-34:/values-v23/values-v23.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\0166e52d0ef2e6ac16f8e0428a0a4f32\\transformed\\cardview-1.0.0\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\d0242ab6746384239f97c874f3843fe4\\transformed\\cardview-1.0.0\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",
@@ -23,7 +23,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\0e9cddc0b8f63fc8951c72ad36bcff8c\\transformed\\appcompat-1.6.1\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\d9a4d62ed3515daa505f0eef1dbe1d20\\transformed\\appcompat-1.6.1\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,20,34,35,36,39,43,44,45,46",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -34,7 +34,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\e0fceb7cd8008ae05c4826a419bc9de3\\transformed\\material-1.11.0\\res\\values-v23\\values-v23.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\971b1c09a4579ccbe1d8521fa938fcb9\\transformed\\material-1.11.0\\res\\values-v23\\values-v23.xml",
                     "from": {
                         "startLines": "2,5,9,13,16,19,22,25,28,32",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4",

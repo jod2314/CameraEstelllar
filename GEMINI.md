@@ -11,13 +11,25 @@ Este archivo sirve como memoria del proyecto para el desarrollo de la aplicació
 - **Objetivo:** App creativa para captura del cielo nocturno con múltiples modos de captura, superposición/apilado (stacking), correcciones basadas en métricas estandarizadas y detección avanzada de hardware.
 
 ## Estado Actual
-- Skill `astro-engineer` desarrollado e instalado.
-- Repositorio Git inicializado localmente.
-- Fase de Planificación Detallada iniciada.
+- **Hito 1 (Cimentación):** Completado. App Nativa Kotlin con MVVM y Red Light Mode funcional.
+- **Hito 2 (Captura RAW):** Completado. Implementación de `CameraController` con soporte para ráfagas DNG y control manual.
+- **Hito 2.5 (UI Profesional):** Completado. Controles dinámicos de ISO (100-6400), Exposición (1s-30s) y Ráfaga.
+- **Limpieza:** Directorio React Native eliminado; proyecto puramente nativo.
+- **Infraestructura:** Skill `astro-engineer` activo y repositorio Git con historial de hitos.
+
+## Logros Técnicos
+- Migración exitosa de arquitectura híbrida a Nativa Pura para optimización de memoria.
+- Implementación de `DngCreator` con sincronización asíncrona de metadatos.
+- Configuración de puente NDK (JNI Zero-Copy) listo para procesamiento matemático.
+- Interfaz optimizada para visión nocturna (Filtro Rojo).
+
+## Próximos Pasos (Fase 3 & 4)
+- Integración de OpenCV nativo para alineación por asterismos.
+- Implementación de Compute Shaders en Vulkan para apilamiento masivo on-device.
 
 ## Protocolos de Desarrollo
-- **Control de Versiones:** Cada cambio importante requiere un `git commit` con descripción concisa en español.
-- **Eficiencia:** Optimización energética y de procesamiento desde la base.
+- **Regla Fundamental:** NO SE AVANZA a ninguna fase de procesamiento, IA, o características avanzadas (incluyendo C++/Vulkan) hasta que no tengamos una aplicación 100% funcional para tomar fotos. Este es el instrumento fundamental del proyecto.
+- **Control de Versiones:** Cada cambio importante requiere un `git commit` con descripción concisa en español. **Eficiencia:** Optimización energética y de procesamiento desde la base.
 - **Validación:** No se avanza al siguiente hito sin una base 100% funcional y libre de bugs.
 
 ## Hoja de Ruta Aprobada (Plan Maestro)

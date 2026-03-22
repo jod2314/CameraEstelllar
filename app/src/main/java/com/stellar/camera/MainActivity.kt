@@ -1,7 +1,9 @@
 package com.stellar.camera
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,24 +12,32 @@ import androidx.core.content.ContextCompat
 import com.stellar.camera.databinding.ActivityMainBinding
 
 /**
- * MainActivity: Cimiento de CameraStellar v3.
- * Orquesta permisos, UI y ciclo de vida.
+ * LensState: Almacena la configuración manual específica de un sensor.
+ */
+data class LensState(
+    var iso: Int,
+    var exposureNs: Long,
+    var burstCount: Int = 1
+)
+
+/**
+ * MainActivity: Soporte Multi-Lente Profesional 2025.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var cameraController: CameraController
     
-    // Gestor de permisos reactivo
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        if (permissions[Manifest.permission.CAMERA] == true) {
-            startCameraFlow()
-        } else {
-            Toast.makeText(this, R.string.permission_rationale, Toast.LENGTH_LONG).show()
-        }
+        if (permissions[Manifest.permission.CAMERA] == true) startCameraFlow() 
+        else Toast.makeText(this, "Permisos insuficientes", Toast.LENGTH_LONG).show()
     }
+
+    private var availableLenses = listOf<AstroLensInfo>()
+    private var currentLensIndex = 0
+    private val lensSettings = mutableMapOf<String, LensState>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,91 +46,116 @@ class MainActivity : AppCompatActivity() {
         
         cameraController = CameraController(this)
 
-        setupUIControls()
-
         binding.captureButton.setOnClickListener {
-            val burstCount = binding.burstSeekBar.progress.coerceAtLeast(1)
-            cameraController.takeBurst(burstCount)
-            Toast.makeText(this, "Capturando ráfaga de $burstCount RAWs...", Toast.LENGTH_SHORT).show()
+            cameraController.takeBurst(binding.burstSeekBar.progress.coerceAtLeast(1))
+        }
+
+        binding.switchLensButton.setOnClickListener {
+            rotateLens()
         }
 
         checkPermissions()
     }
 
-    private fun setupUIControls() {
-        // Control de ISO
-        binding.isoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                val isoValue = progress.coerceAtLeast(100)
-                binding.isoLabel.text = "ISO: $isoValue"
-                cameraController.currentIso = isoValue
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {
-                cameraController.updatePreviewSettings()
-            }
-        })
+    private fun rotateLens() {
+        if (availableLenses.isEmpty()) return
+        currentLensIndex = (currentLensIndex + 1) % availableLenses.size
+        val lens = availableLenses[currentLensIndex]
+        
+        setupUIForLens(lens)
+        val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        cameraController.openLens(lens, binding.cameraPreview.holder.surface)
+        Toast.makeText(this, "Sensor: ${lens.name} Activo", Toast.LENGTH_SHORT).show()
+    }
 
-        // Control de Exposición (en segundos)
-        binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                val seconds = progress.coerceAtLeast(1)
-                binding.exposureLabel.text = "Exposición: ${seconds}.0s"
-                cameraController.currentExposureNs = seconds * 1_000_000_000L
-            }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {
-                cameraController.updatePreviewSettings()
-            }
-        })
+    private fun setupUIForLens(lens: AstroLensInfo) {
+        val state = lensSettings.getOrPut(lens.logicalId + (lens.physicalId ?: "")) {
+            LensState(iso = lens.maxAnalogIso / 2, exposureNs = 1_000_000_000L)
+        }
 
-        // Control de Ráfaga
-        binding.burstSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) {
-                val count = progress.coerceAtLeast(1)
-                binding.burstLabel.text = "Fotos en Ráfaga: $count"
+        runOnUiThread {
+            cameraController.currentIso = state.iso
+            cameraController.currentExposureNs = state.exposureNs
+
+            // ISO Config
+            binding.isoSeekBar.setOnSeekBarChangeListener(null)
+            binding.isoSeekBar.max = lens.maxAnalogIso
+            binding.isoSeekBar.progress = state.iso
+            binding.isoLabel.text = "ISO (Analógico): ${state.iso}"
+            
+            binding.isoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
+                    val iso = p.coerceAtLeast(100)
+                    binding.isoLabel.text = "ISO: $iso"
+                    state.iso = iso
+                    cameraController.currentIso = iso
+                }
+                override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(s: android.widget.SeekBar?) { 
+                    cameraController.updatePreviewSettings(lens) 
+                }
+            })
+
+            // Exposure Config
+            binding.exposureSeekBar.setOnSeekBarChangeListener(null)
+            val maxSec = (lens.maxExposureNs / 1_000_000_000L).toInt().coerceAtLeast(1)
+            binding.exposureSeekBar.max = maxSec
+            binding.exposureSeekBar.progress = (state.exposureNs / 1_000_000_000L).toInt().coerceIn(1, maxSec)
+            binding.exposureLabel.text = "Exp: ${(state.exposureNs/1e9).toInt()}s (Max Hardware: ${maxSec}s)"
+            
+            binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
+                    val sec = p.coerceAtLeast(1)
+                    binding.exposureLabel.text = "Exposición: ${sec}s"
+                    state.exposureNs = sec * 1_000_000_000L
+                    cameraController.currentExposureNs = state.exposureNs
+                }
+                override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(s: android.widget.SeekBar?) {}
+            })
+
+            val hwStr = when(lens.hardwareLevel) {
+                1 -> "FULL"
+                3 -> "LEVEL_3"
+                else -> "LIMITED"
             }
-            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {}
-        })
+            binding.statusText.text = "${lens.name} | f/${lens.aperture} | $hwStr | RAW: ${lens.hasRaw}"
+        }
     }
 
     private fun checkPermissions() {
-        val permissionsToRequest = arrayOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.ACCESS_FINE_LOCATION
-        )
-
-        val missingPermissions = permissionsToRequest.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isEmpty()) {
+        val perms = arrayOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (perms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
             startCameraFlow()
         } else {
-            requestPermissionLauncher.launch(permissionsToRequest)
+            requestPermissionLauncher.launch(perms)
         }
     }
 
     private fun startCameraFlow() {
         cameraController.startBackgroundThread()
-        binding.statusText.text = "Cámara Iniciada - RAW Habilitado"
+        val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         
-        // Esperar a que el SurfaceView esté listo
-        binding.cameraPreview.holder.addCallback(object : android.view.SurfaceHolder.Callback {
-            override fun surfaceCreated(holder: android.view.SurfaceHolder) {
-                val manager = getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
-                cameraController.openCamera(manager, holder.surface)
-            }
-            override fun surfaceChanged(holder: android.view.SurfaceHolder, format: Int, width: Int, height: Int) {}
-            override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
-                cameraController.closeCamera()
-            }
-        })
+        availableLenses = cameraController.scanAvailableLenses(manager)
+        if (availableLenses.isNotEmpty()) {
+            val initial = availableLenses[currentLensIndex]
+            setupUIForLens(initial)
+            
+            binding.cameraPreview.holder.addCallback(object : android.view.SurfaceHolder.Callback {
+                override fun surfaceCreated(holder: android.view.SurfaceHolder) {
+                    cameraController.openLens(initial, holder.surface)
+                }
+                override fun surfaceChanged(h: android.view.SurfaceHolder, f: Int, w: Int, h2: Int) {}
+                override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
+                    cameraController.closeCamera()
+                }
+            })
+        }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onPause() {
+        cameraController.closeCamera()
         cameraController.stopBackgroundThread()
+        super.onPause()
     }
 }

@@ -6,24 +6,31 @@
 
     <uses-sdk
         android:minSdkVersion="28"
-        android:targetSdkVersion="34" />
+        android:targetSdkVersion="35" />
 
-    <!-- Permisos de Cámara -->
+    <!-- Permisos de Cámara y Sensores -->
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Características de Hardware Obligatorias (Filtro de Google Play) -->
     <uses-feature
         android:name="android.hardware.camera"
         android:required="true" />
     <uses-feature
-        android:name="android.hardware.camera.autofocus"
-        android:required="false" />
+        android:name="android.hardware.camera.any"
+        android:required="true" />
     <uses-feature
         android:name="android.hardware.camera.raw"
         android:required="true" />
+    <uses-feature
+        android:name="android.hardware.camera.level.full"
+        android:required="false" />
 
-    <!-- Permisos de Ubicación (para metadatos astronómicos) -->
+    <!-- Permisos de Ubicación (Metadatos Astronómicos) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Evitar que la ráfaga sea interrumpida por el ahorro de energía -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <permission
         android:name="com.stellar.camera.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -46,6 +53,7 @@
         android:theme="@style/Theme.CameraStellar" >
         <activity
             android:name="com.stellar.camera.MainActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
             android:exported="true"
             android:screenOrientation="portrait" >
             <intent-filter>

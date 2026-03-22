@@ -5,16 +5,31 @@ plugins {
 
 android {
     namespace = "com.stellar.camera"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.stellar.camera"
         minSdk = 28
-        targetSdk = 34
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                // Forzar alineación de 16 KB globalmente para todas las libs nativas
+                cppFlags += "-Wl,-z,max-page-size=16384"
+                arguments += "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,max-page-size=16384"
+            }
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Recomendado para compatibilidad con 16 KB
+            useLegacyPackaging = false
+        }
     }
 
     buildTypes {

@@ -19,6 +19,19 @@
         android:background="#60FF0000"
         android:visibility="visible" />
 
+    <!-- Botón de Cambio de Lente -->
+    <Button
+        android:id="@+id/switchLensButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:text="Cambiar Lente"
+        android:textColor="#000000"
+        android:backgroundTint="#FF0000"
+        android:textSize="12sp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
     <!-- Panel de Controles Profesionales -->
     <LinearLayout
         android:id="@+id/controlsPanel"

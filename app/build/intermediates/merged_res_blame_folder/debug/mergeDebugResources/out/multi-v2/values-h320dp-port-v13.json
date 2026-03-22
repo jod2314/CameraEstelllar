@@ -4,7 +4,7 @@
             "outputFile": "com.stellar.camera.app-mergeDebugResources-34:/values-h320dp-port-v13/values-h320dp-port-v13.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\e0fceb7cd8008ae05c4826a419bc9de3\\transformed\\material-1.11.0\\res\\values-h320dp-port-v13\\values-h320dp-port-v13.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\971b1c09a4579ccbe1d8521fa938fcb9\\transformed\\material-1.11.0\\res\\values-h320dp-port-v13\\values-h320dp-port-v13.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",

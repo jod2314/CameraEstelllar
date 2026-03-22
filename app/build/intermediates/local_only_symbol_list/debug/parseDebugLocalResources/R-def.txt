@@ -1,5 +1,7 @@
 R_DEF: Internal format may change without notice
 local
+drawable ic_launcher_background
+drawable ic_launcher_foreground
 id burstLabel
 id burstSeekBar
 id cameraPreview
@@ -11,7 +13,12 @@ id isoLabel
 id isoSeekBar
 id redFilter
 id statusText
+id switchLensButton
 layout activity_main
+mipmap ic_launcher
+mipmap ic_launcher_round
 string app_name
 string permission_rationale
 style Theme.CameraStellar
+xml backup_rules
+xml data_extraction_rules
