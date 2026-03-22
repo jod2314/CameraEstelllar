@@ -47,7 +47,10 @@ class MainActivity : AppCompatActivity() {
         cameraController = CameraController(this)
 
         binding.captureButton.setOnClickListener {
-            cameraController.takeBurst(binding.burstSeekBar.progress.coerceAtLeast(1))
+            if (availableLenses.isEmpty()) return@setOnClickListener
+            val activeLens = availableLenses[currentLensIndex]
+            cameraController.takeBurst(binding.burstSeekBar.progress.coerceAtLeast(1), activeLens)
+            Toast.makeText(this, "Capturando ráfaga científica...", Toast.LENGTH_SHORT).show()
         }
 
         binding.switchLensButton.setOnClickListener {
@@ -98,11 +101,14 @@ class MainActivity : AppCompatActivity() {
 
             // Exposure Config
             binding.exposureSeekBar.setOnSeekBarChangeListener(null)
-            val maxSec = (lens.maxExposureNs / 1_000_000_000L).toInt().coerceAtLeast(1)
+            // Exposure Config: DESBLOQUEO TOTAL 60s
+            val driverMaxSec = (lens.maxExposureNs / 1_000_000_000L).toInt()
+            val maxSec = 60 // Forzamos 60s para intentar el bypass manual
+
             binding.exposureSeekBar.max = maxSec
             binding.exposureSeekBar.progress = (state.exposureNs / 1_000_000_000L).toInt().coerceIn(1, maxSec)
-            binding.exposureLabel.text = "Exp: ${(state.exposureNs/1e9).toInt()}s (Max Hardware: ${maxSec}s)"
-            
+            binding.exposureLabel.text = "Exposición: ${(state.exposureNs/1e9).toInt()}s (Reportado: ${driverMaxSec}s)"
+
             binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
                     val sec = p.coerceAtLeast(1)

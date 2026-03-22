@@ -19,10 +19,8 @@ import android.view.Surface
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
+import kotlin.math.abs
 
-/**
- * CameraController: Motor de captura avanzado basado en los estándares 2025.
- */
 class CameraController(private val context: Context) {
     private val TAG = "CameraController"
     private var cameraDevice: CameraDevice? = null
@@ -35,120 +33,94 @@ class CameraController(private val context: Context) {
     
     private var rawImageReader: ImageReader? = null
     private var currentPreviewSurface: Surface? = null
+    
+    private val pendingRawImages = ConcurrentHashMap<Long, Image>()
+    private val pendingCaptureResults = ConcurrentHashMap<Long, TotalCaptureResult>()
 
-    // Parámetros de Captura
     var currentIso: Int = 800
     var currentExposureNs: Long = 100_000_000L
+    var isCapturing: Boolean = false
 
     fun startBackgroundThread() {
         if (backgroundThread == null) {
-            backgroundThread = HandlerThread("AstroEngine").also { it.start() }
+            backgroundThread = HandlerThread("AstroCore").also { it.start() }
             backgroundHandler = Handler(backgroundThread!!.looper)
         }
     }
 
     fun stopBackgroundThread() {
+        if (isCapturing) return // No matar el hilo si estamos procesando 20s
         backgroundThread?.quitSafely()
         backgroundThread = null
         backgroundHandler = null
     }
 
-    /**
-     * ESCANEO PROFUNDO: Detecta hardware y componentes físicos.
-     */
     fun scanAvailableLenses(manager: CameraManager): List<AstroLensInfo> {
         this.manager = manager
         val lensList = mutableListOf<AstroLensInfo>()
-        
         try {
-            for (logicalId in manager.cameraIdList) {
-                val chars = manager.getCameraCharacteristics(logicalId)
-                if (chars.get(CameraCharacteristics.LENS_FACING) != CameraCharacteristics.LENS_FACING_BACK) continue
+            val logicalChars = manager.getCameraCharacteristics("0")
+            val physicalIds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                logicalChars.physicalCameraIds
+            } else emptySet()
 
-                val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: intArrayOf()
-                val isMulti = caps.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)
-
-                if (isMulti && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    chars.physicalCameraIds.forEach { physId ->
-                        evaluateAndAddLens(logicalId, physId, manager.getCameraCharacteristics(physId), lensList)
-                    }
-                } else {
-                    evaluateAndAddLens(logicalId, null, chars, lensList)
-                }
+            addLensToList("0", null, logicalChars, lensList)
+            physicalIds.forEach { id ->
+                addLensToList("0", id, manager.getCameraCharacteristics(id), lensList)
             }
-        } catch (e: Exception) { Log.e(TAG, "Error en Scan", e) }
-        return lensList.distinctBy { it.logicalId + (it.physicalId ?: "") }
-            .sortedByDescending { it.maxExposureNs }
+        } catch (e: Exception) { Log.e(TAG, "Scan fail", e) }
+        return lensList
     }
 
-    private fun evaluateAndAddLens(lId: String, pId: String?, chars: CameraCharacteristics, list: MutableList<AstroLensInfo>) {
-        val caps = chars.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: intArrayOf()
-        if (!caps.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR)) return
-
+    private fun addLensToList(lId: String, pId: String?, chars: CameraCharacteristics, list: MutableList<AstroLensInfo>) {
         val expRange = chars.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
         val isoRange = chars.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
         val focal = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull() ?: 0.0f
-        val aperture = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull() ?: 0.0f
         
-        val supportsBoost = if (Build.VERSION.SDK_INT >= 35) {
-            chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES)?.contains(4) ?: false
-        } else false
-
-        val name = when {
-            focal < 3.0f -> "Ultra-Wide"
-            focal > 6.0f -> "Telephoto"
-            else -> "Principal"
-        }
-
         list.add(AstroLensInfo(
-            logicalId = lId,
-            physicalId = pId,
-            name = name,
+            logicalId = lId, physicalId = pId,
+            name = if (focal < 3.0f) "Ultra-Wide" else if (focal > 6.0f) "Tele" else "Main",
             maxExposureNs = expRange?.upper ?: 1_000_000_000L,
             maxAnalogIso = chars.get(CameraCharacteristics.SENSOR_MAX_ANALOG_SENSITIVITY) ?: isoRange?.upper ?: 800,
-            aperture = aperture,
+            aperture = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull() ?: 0.0f,
             focalLength = focal,
-            hardwareLevel = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)!!,
-            supportsLowLightBoost = supportsBoost,
-            hasRaw = caps.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW)
+            hardwareLevel = chars.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) ?: 0,
+            supportsLowLightBoost = if (Build.VERSION.SDK_INT >= 35) chars.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_MODES)?.contains(4) == true else false,
+            hasRaw = true
         ))
     }
 
     @SuppressLint("MissingPermission")
     fun openLens(lens: AstroLensInfo, previewSurface: Surface) {
-        closeCamera()
         this.currentPreviewSurface = previewSurface
-        
-        try {
-            manager?.openCamera(lens.logicalId, object : CameraDevice.StateCallback() {
-                override fun onOpened(camera: CameraDevice) {
-                    cameraDevice = camera
-                    createSession2025(lens, previewSurface)
-                }
-                override fun onDisconnected(camera: CameraDevice) { closeCamera() }
-                override fun onError(camera: CameraDevice, error: Int) { closeCamera() }
-            }, backgroundHandler)
-        } catch (e: Exception) { Log.e(TAG, "Error opening lens", e) }
+        manager?.openCamera("0", object : CameraDevice.StateCallback() {
+            override fun onOpened(camera: CameraDevice) {
+                cameraDevice = camera
+                createSession(lens, previewSurface)
+            }
+            override fun onDisconnected(camera: CameraDevice) { closeCamera() }
+            override fun onError(camera: CameraDevice, error: Int) { closeCamera() }
+        }, backgroundHandler)
     }
 
-    private fun createSession2025(lens: AstroLensInfo, previewSurface: Surface) {
-        val targetId = lens.physicalId ?: lens.logicalId
+    private fun createSession(lens: AstroLensInfo, previewSurface: Surface) {
+        val targetId = lens.physicalId ?: "0"
         val chars = manager?.getCameraCharacteristics(targetId)
         val map = chars?.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val rawSize = map?.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width * it.height }
         
-        rawSize?.let {
-            rawImageReader = ImageReader.newInstance(it.width, it.height, ImageFormat.RAW_SENSOR, 2).apply {
-                setOnImageAvailableListener({ reader ->
-                    val img = reader.acquireNextImage()
-                    if (img != null) handleRawImage(img, lens)
-                }, backgroundHandler)
-            }
+        rawImageReader = ImageReader.newInstance(rawSize?.width ?: 1920, rawSize?.height ?: 1080, ImageFormat.RAW_SENSOR, 3).apply {
+            setOnImageAvailableListener({ reader ->
+                val img = reader.acquireNextImage()
+                if (img != null) {
+                    Log.d(TAG, "RAW Image Arrived: ${img.timestamp}")
+                    handleRawImage(img, lens)
+                }
+            }, backgroundHandler)
         }
 
         val previewConfig = OutputConfiguration(previewSurface)
         val rawConfig = OutputConfiguration(rawImageReader!!.surface)
-        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && lens.physicalId != null) {
             previewConfig.setPhysicalCameraId(lens.physicalId)
             rawConfig.setPhysicalCameraId(lens.physicalId)
@@ -177,20 +149,14 @@ class CameraController(private val context: Context) {
         try {
             val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             builder?.addTarget(surface)
-            
-            if (Build.VERSION.SDK_INT >= 35 && lens?.supportsLowLightBoost == true) {
-                builder?.set(CaptureRequest.CONTROL_AE_MODE, 4) // Boost Priority
-            } else {
-                builder?.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-                builder?.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON)
-            }
-            
+            builder?.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
             captureSession?.setRepeatingRequest(builder!!.build(), null, backgroundHandler)
         } catch (e: Exception) {}
     }
 
-    fun takeBurst(count: Int) {
-        if (cameraDevice == null || captureSession == null) return
+    fun takeBurst(count: Int, lens: AstroLensInfo) {
+        if (cameraDevice == null || captureSession == null || isCapturing) return
+        isCapturing = true
         try {
             val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_MANUAL)
             rawImageReader?.surface?.let { builder?.addTarget(it) }
@@ -208,17 +174,64 @@ class CameraController(private val context: Context) {
 
             val requests = List(count) { builder!!.build() }
             captureSession?.stopRepeating()
+            
             captureSession?.captureBurst(requests, object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(s: CameraCaptureSession, r: CaptureRequest, result: TotalCaptureResult) {
-                    if (requests.indexOf(r) == count - 1) updatePreviewSettings()
+                    val realExp = result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L
+                    Log.w(TAG, "BYPASS RESULT: Requerido=${currentExposureNs/1e9}s | Real=${realExp/1e9}s")
+                    handleCaptureResult(result, lens)
+                    if (requests.indexOf(r) == count - 1) {
+                        isCapturing = false
+                        updatePreviewSettings(lens)
+                    }
+                }
+                override fun onCaptureFailed(s: CameraCaptureSession, r: CaptureRequest, f: CaptureFailure) {
+                    isCapturing = false
+                    updatePreviewSettings(lens)
                 }
             }, backgroundHandler)
-        } catch (e: Exception) {}
+        } catch (e: Exception) { isCapturing = false }
     }
 
     private fun handleRawImage(image: Image, lens: AstroLensInfo) {
+        val ts = image.timestamp
+        // REPARACIÓN: Búsqueda con tolerancia de 1ms para largas exposiciones
+        val result = findMatchingResult(ts)
+        if (result != null) {
+            saveDng(image, result, lens)
+        } else {
+            pendingRawImages[ts] = image
+        }
+    }
+
+    private fun handleCaptureResult(result: TotalCaptureResult, lens: AstroLensInfo) {
+        val ts = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return
+        Log.d(TAG, "Metadata Arrived: $ts")
+        val image = findMatchingImage(ts)
+        if (image != null) {
+            saveDng(image, result, lens)
+        } else {
+            pendingCaptureResults[ts] = result
+        }
+    }
+
+    private fun findMatchingResult(timestamp: Long): TotalCaptureResult? {
+        return pendingCaptureResults.keys.find { abs(it - timestamp) < 1_000_000 }?.let { 
+            pendingCaptureResults.remove(it) 
+        }
+    }
+
+    private fun findMatchingImage(timestamp: Long): Image? {
+        return pendingRawImages.keys.find { abs(it - timestamp) < 1_000_000 }?.let { 
+            pendingRawImages.remove(it) 
+        }
+    }
+
+    private fun saveDng(image: Image, result: TotalCaptureResult, lens: AstroLensInfo) {
         backgroundHandler?.post {
             try {
+                val targetId = lens.physicalId ?: "0"
+                val chars = manager?.getCameraCharacteristics(targetId) ?: return@post
                 val filename = "ASTRO_${lens.name}_${System.currentTimeMillis()}.dng"
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
@@ -228,17 +241,27 @@ class CameraController(private val context: Context) {
                 val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
                 uri?.let {
                     context.contentResolver.openOutputStream(it)?.use { out ->
-                        // Reservado para DngCreator en Fase 3
+                        DngCreator(chars, result).use { creator ->
+                            creator.writeImage(out, image)
+                        }
                     }
+                    Log.i(TAG, "✅ ARCHIVO GUARDADO: $filename")
                 }
-            } catch (e: Exception) {} finally { image.close() }
+            } catch (e: Exception) { 
+                Log.e(TAG, "❌ Error guardando DNG: ${e.message}")
+            } finally { 
+                image.close() 
+            }
         }
     }
 
     fun closeCamera() {
-        captureSession?.close()
-        cameraDevice?.close()
-        rawImageReader?.close()
+        if (isCapturing) return
+        try {
+            captureSession?.close()
+            cameraDevice?.close()
+            rawImageReader?.close()
+        } catch (e: Exception) {}
         captureSession = null
         cameraDevice = null
         rawImageReader = null
