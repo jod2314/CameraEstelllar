@@ -17,6 +17,9 @@
     
     <!-- Evitar que la ráfaga sea interrumpida por el ahorro de energía -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -39,6 +42,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service 
+            android:name=".AstroCaptureService"
+            android:foregroundServiceType="camera"
+            android:exported="false" />
     </application>
 
 </manifest>

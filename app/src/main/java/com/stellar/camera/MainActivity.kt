@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,7 +22,7 @@ data class LensState(
 )
 
 /**
- * MainActivity: Soporte Multi-Lente Profesional 2025.
+ * MainActivity: Soporte Multi-Lente Profesional 2025 con Gestión de Post-Procesado.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -46,11 +47,17 @@ class MainActivity : AppCompatActivity() {
         
         cameraController = CameraController(this)
 
+        // Escuchar cuando el pipeline esté listo para la siguiente toma
+        cameraController.onCaptureReadyListener = {
+            setControlsEnabled(true)
+            Toast.makeText(this, "Instrumento listo", Toast.LENGTH_SHORT).show()
+        }
+
         binding.captureButton.setOnClickListener {
             if (availableLenses.isEmpty()) return@setOnClickListener
             val activeLens = availableLenses[currentLensIndex]
+            setControlsEnabled(false)
             cameraController.takeBurst(binding.burstSeekBar.progress.coerceAtLeast(1), activeLens)
-            Toast.makeText(this, "Capturando ráfaga científica...", Toast.LENGTH_SHORT).show()
         }
 
         binding.switchLensButton.setOnClickListener {
@@ -58,6 +65,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         checkPermissions()
+    }
+
+    private fun setControlsEnabled(enabled: Boolean) {
+        runOnUiThread {
+            binding.captureButton.isEnabled = enabled
+            binding.switchLensButton.isEnabled = enabled
+            binding.isoSeekBar.isEnabled = enabled
+            binding.exposureSeekBar.isEnabled = enabled
+            binding.burstSeekBar.isEnabled = enabled
+            binding.captureButton.alpha = if (enabled) 1.0f else 0.5f
+        }
     }
 
     private fun rotateLens() {
@@ -88,33 +106,33 @@ class MainActivity : AppCompatActivity() {
             
             binding.isoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
-                    val iso = p.coerceAtLeast(100)
-                    binding.isoLabel.text = "ISO: $iso"
-                    state.iso = iso
-                    cameraController.currentIso = iso
+                    val newIso = p.coerceAtLeast(100)
+                    binding.isoLabel.text = "ISO: $newIso"
+                    state.iso = newIso
+                    cameraController.currentIso = newIso
                 }
                 override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
                 override fun onStopTrackingTouch(s: android.widget.SeekBar?) { 
-                    cameraController.updatePreviewSettings(lens) 
+                    cameraController.updatePreviewSettings() 
                 }
             })
 
-            // Exposure Config
-            binding.exposureSeekBar.setOnSeekBarChangeListener(null)
             // Exposure Config: DESBLOQUEO TOTAL 60s
+            binding.exposureSeekBar.setOnSeekBarChangeListener(null)
             val driverMaxSec = (lens.maxExposureNs / 1_000_000_000L).toInt()
-            val maxSec = 60 // Forzamos 60s para intentar el bypass manual
+            val maxSec = 60 
 
             binding.exposureSeekBar.max = maxSec
             binding.exposureSeekBar.progress = (state.exposureNs / 1_000_000_000L).toInt().coerceIn(1, maxSec)
-            binding.exposureLabel.text = "Exposición: ${(state.exposureNs/1e9).toInt()}s (Reportado: ${driverMaxSec}s)"
+            binding.exposureLabel.text = "Exp: ${(state.exposureNs/1e9).toInt()}s (Driver Max: ${driverMaxSec}s)"
 
             binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
-                    val sec = p.coerceAtLeast(1)
-                    binding.exposureLabel.text = "Exposición: ${sec}s"
-                    state.exposureNs = sec * 1_000_000_000L
-                    cameraController.currentExposureNs = state.exposureNs
+                    val newSec = p.coerceAtLeast(1)
+                    binding.exposureLabel.text = "Exposición: ${newSec}s"
+                    val newNs = newSec * 1_000_000_000L
+                    state.exposureNs = newNs
+                    cameraController.currentExposureNs = newNs
                 }
                 override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
                 override fun onStopTrackingTouch(s: android.widget.SeekBar?) {}
@@ -130,11 +148,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissions() {
-        val perms = arrayOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
+        val perms = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
+        
+        // HALLAZGO: Las notificaciones son un permiso runtime en Android 13+ (API 33)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         if (perms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
             startCameraFlow()
         } else {
-            requestPermissionLauncher.launch(perms)
+            requestPermissionLauncher.launch(perms.toTypedArray())
         }
     }
 
