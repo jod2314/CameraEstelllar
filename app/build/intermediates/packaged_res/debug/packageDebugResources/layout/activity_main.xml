@@ -11,6 +11,52 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Informe de Auditoría de Sensores (Capa Superior Traslúcida) -->
+    <LinearLayout
+        android:id="@+id/auditPanel"
+        android:layout_width="match_parent"
+        android:layout_height="200dp"
+        android:background="#80000000"
+        android:orientation="vertical"
+        android:padding="10dp"
+        android:visibility="visible"
+        app:layout_constraintTop_toTopOf="parent">
+        
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="AUDITORÍA DE HARDWARE ESTELAR"
+            android:textColor="#00FF00"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="5dp">
+            <TextView
+                android:id="@+id/auditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Escaneando..."
+                android:textColor="#00FF00"
+                android:textSize="10sp"
+                android:fontFamily="monospace" />
+        </ScrollView>
+
+        <Button
+            android:id="@+id/closeAuditButton"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_gravity="end"
+            android:padding="0dp"
+            android:text="Cerrar Info"
+            android:textSize="10sp"
+            android:backgroundTint="#4CAF50"
+            android:textColor="#FFFFFF"/>
+    </LinearLayout>
+
     <!-- Capa de Filtro Rojo (Red Light Mode) -->
     <View
         android:id="@+id/redFilter"
@@ -41,6 +87,16 @@
         android:orientation="vertical"
         android:padding="20dp"
         app:layout_constraintBottom_toBottomOf="parent">
+
+        <TextView
+            android:id="@+id/metadataText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Real-time: --"
+            android:textColor="#FFFFFF"
+            android:textAlignment="center"
+            android:textSize="10sp"
+            android:layout_marginBottom="5dp" />
 
         <TextView
             android:id="@+id/statusText"

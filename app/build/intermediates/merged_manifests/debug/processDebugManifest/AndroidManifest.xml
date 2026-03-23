@@ -31,6 +31,9 @@
 
     <!-- Evitar que la ráfaga sea interrumpida por el ahorro de energía -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <permission
         android:name="com.stellar.camera.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -62,6 +65,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name="com.stellar.camera.AstroCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
         <!--
         Service for holding metadata. Cannot be instantiated.
         Metadata will be merged from other manifests.

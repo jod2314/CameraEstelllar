@@ -6,24 +6,19 @@ import android.content.pm.PackageManager
 import android.hardware.camera2.CameraManager
 import android.os.Build
 import android.os.Bundle
+import android.view.SurfaceHolder
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.stellar.camera.databinding.ActivityMainBinding
 
-/**
- * LensState: Almacena la configuración manual específica de un sensor.
- */
 data class LensState(
     var iso: Int,
     var exposureNs: Long,
     var burstCount: Int = 1
 )
 
-/**
- * MainActivity: Soporte Multi-Lente Profesional 2025 con Gestión de Post-Procesado.
- */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
@@ -39,6 +34,19 @@ class MainActivity : AppCompatActivity() {
     private var availableLenses = listOf<AstroLensInfo>()
     private var currentLensIndex = 0
     private val lensSettings = mutableMapOf<String, LensState>()
+    private var isSurfaceReady = false
+
+    private val surfaceCallback = object : SurfaceHolder.Callback {
+        override fun surfaceCreated(holder: SurfaceHolder) {
+            isSurfaceReady = true
+            tryOpenCurrentLens()
+        }
+        override fun surfaceChanged(h: SurfaceHolder, f: Int, w: Int, h2: Int) {}
+        override fun surfaceDestroyed(holder: SurfaceHolder) {
+            isSurfaceReady = false
+            cameraController.closeCamera()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,7 +55,13 @@ class MainActivity : AppCompatActivity() {
         
         cameraController = CameraController(this)
 
-        // Escuchar cuando el pipeline esté listo para la siguiente toma
+        cameraController.onMetadataReceived = { iso, expNs ->
+            runOnUiThread {
+                binding.metadataText.text = "RAW FEEDBACK | ISO: $iso | Exp: ${String.format("%.3f", expNs/1e9)}s"
+                binding.metadataText.setTextColor(if (iso == cameraController.currentIso) 0xFF00FF00.toInt() else 0xFFFFFFFF.toInt())
+            }
+        }
+
         cameraController.onCaptureReadyListener = {
             setControlsEnabled(true)
             Toast.makeText(this, "Instrumento listo", Toast.LENGTH_SHORT).show()
@@ -60,10 +74,15 @@ class MainActivity : AppCompatActivity() {
             cameraController.takeBurst(binding.burstSeekBar.progress.coerceAtLeast(1), activeLens)
         }
 
-        binding.switchLensButton.setOnClickListener {
-            rotateLens()
+        binding.switchLensButton.setOnClickListener { rotateLens() }
+        
+        binding.closeAuditButton.setOnClickListener {
+            binding.auditPanel.visibility = android.view.View.GONE
         }
 
+        // Registrar el callback UNA SOLA VEZ
+        binding.cameraPreview.holder.addCallback(surfaceCallback)
+        
         checkPermissions()
     }
 
@@ -79,14 +98,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun rotateLens() {
-        if (availableLenses.isEmpty()) return
+        if (availableLenses.isEmpty() || cameraController.isTransitioning) return
         currentLensIndex = (currentLensIndex + 1) % availableLenses.size
+        tryOpenCurrentLens()
+    }
+
+    private fun tryOpenCurrentLens() {
+        if (availableLenses.isEmpty() || !isSurfaceReady) return
         val lens = availableLenses[currentLensIndex]
-        
         setupUIForLens(lens)
-        val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         cameraController.openLens(lens, binding.cameraPreview.holder.surface)
-        Toast.makeText(this, "Sensor: ${lens.name} Activo", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Sensor: ${lens.name}", Toast.LENGTH_SHORT).show()
     }
 
     private fun setupUIForLens(lens: AstroLensInfo) {
@@ -98,11 +120,10 @@ class MainActivity : AppCompatActivity() {
             cameraController.currentIso = state.iso
             cameraController.currentExposureNs = state.exposureNs
 
-            // ISO Config
             binding.isoSeekBar.setOnSeekBarChangeListener(null)
             binding.isoSeekBar.max = lens.maxAnalogIso
             binding.isoSeekBar.progress = state.iso
-            binding.isoLabel.text = "ISO (Analógico): ${state.iso}"
+            binding.isoLabel.text = "ISO: ${state.iso}"
             
             binding.isoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
@@ -117,22 +138,18 @@ class MainActivity : AppCompatActivity() {
                 }
             })
 
-            // Exposure Config: DESBLOQUEO TOTAL 60s
             binding.exposureSeekBar.setOnSeekBarChangeListener(null)
-            val driverMaxSec = (lens.maxExposureNs / 1_000_000_000L).toInt()
-            val maxSec = 60 
-
+            val maxSec = 30 // BYPASS: Permitimos hasta 30s manuales para probar el hardware
             binding.exposureSeekBar.max = maxSec
             binding.exposureSeekBar.progress = (state.exposureNs / 1_000_000_000L).toInt().coerceIn(1, maxSec)
-            binding.exposureLabel.text = "Exp: ${(state.exposureNs/1e9).toInt()}s (Driver Max: ${driverMaxSec}s)"
+            binding.exposureLabel.text = "Exp: ${(state.exposureNs/1e9).toInt()}s"
 
             binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
                     val newSec = p.coerceAtLeast(1)
-                    binding.exposureLabel.text = "Exposición: ${newSec}s"
-                    val newNs = newSec * 1_000_000_000L
-                    state.exposureNs = newNs
-                    cameraController.currentExposureNs = newNs
+                    binding.exposureLabel.text = "INYECTANDO: ${newSec}s"
+                    state.exposureNs = newSec * 1_000_000_000L
+                    cameraController.currentExposureNs = state.exposureNs
                 }
                 override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
                 override fun onStopTrackingTouch(s: android.widget.SeekBar?) {}
@@ -143,18 +160,15 @@ class MainActivity : AppCompatActivity() {
                 3 -> "LEVEL_3"
                 else -> "LIMITED"
             }
-            binding.statusText.text = "${lens.name} | f/${lens.aperture} | $hwStr | RAW: ${lens.hasRaw}"
+            binding.statusText.text = "${lens.name} | f/${lens.aperture} | $hwStr"
         }
     }
 
     private fun checkPermissions() {
         val perms = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.ACCESS_FINE_LOCATION)
-        
-        // HALLAZGO: Las notificaciones son un permiso runtime en Android 13+ (API 33)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             perms.add(Manifest.permission.POST_NOTIFICATIONS)
         }
-
         if (perms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
             startCameraFlow()
         } else {
@@ -165,27 +179,62 @@ class MainActivity : AppCompatActivity() {
     private fun startCameraFlow() {
         cameraController.startBackgroundThread()
         val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        
         availableLenses = cameraController.scanAvailableLenses(manager)
+        
+        // Generar Informe de Auditoría
+        val report = StringBuilder()
+        report.append("Dispositivos de Imagen Detectados:\n")
+        report.append("---------------------------------\n")
+        availableLenses.forEachIndexed { index, lens ->
+            val hw = when(lens.hardwareLevel) {
+                1 -> "FULL"
+                3 -> "LEVEL_3"
+                2 -> "LEGACY"
+                else -> "LIMITED"
+            }
+            val type = if (lens.isPhysical) "FÍSICO" else "LÓGICO"
+            report.append("S$index: ${lens.name}\n")
+            report.append("  > Tipo: $type\n")
+            report.append("  > ID: L:${lens.logicalId} / P:${lens.physicalId ?: "None"}\n")
+            report.append("  > Hardware Level: $hw\n")
+            report.append("  > ISO Analógico Máx: ${lens.maxAnalogIso}\n")
+            report.append("  > Exp. Máxima: ${String.format("%.1f", lens.maxExposureNs/1e9)}s\n")
+            report.append("  > RAW Sensor: ${if(lens.hasRaw) "SI ✅" else "NO ❌"}\n")
+            if (lens.vendorKeys.isNotEmpty()) {
+                report.append("  > Vendor Tags: ${lens.vendorKeys.size} detectadas\n")
+                val samsungExp = lens.vendorKeys.find { it.contains("exposure") || it.contains("shutter") }
+                if (samsungExp != null) report.append("    [!] Llave de Exp. Extendida: SI\n")
+            }
+            report.append("---------------------------------\n")
+        }
+        
+        runOnUiThread {
+            binding.auditText.text = report.toString()
+            if (availableLenses.isEmpty()) {
+                binding.auditText.text = "ERROR: No se detectaron sensores compatibles con RAW/LEVEL_3"
+                binding.auditText.setTextColor(0xFFFF0000.toInt())
+            }
+        }
+
         if (availableLenses.isNotEmpty()) {
-            val initial = availableLenses[currentLensIndex]
-            setupUIForLens(initial)
-            
-            binding.cameraPreview.holder.addCallback(object : android.view.SurfaceHolder.Callback {
-                override fun surfaceCreated(holder: android.view.SurfaceHolder) {
-                    cameraController.openLens(initial, holder.surface)
-                }
-                override fun surfaceChanged(h: android.view.SurfaceHolder, f: Int, w: Int, h2: Int) {}
-                override fun surfaceDestroyed(holder: android.view.SurfaceHolder) {
-                    cameraController.closeCamera()
-                }
-            })
+            tryOpenCurrentLens()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (availableLenses.isNotEmpty() && isSurfaceReady) {
+            tryOpenCurrentLens()
         }
     }
 
     override fun onPause() {
         cameraController.closeCamera()
-        cameraController.stopBackgroundThread()
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        cameraController.stopBackgroundThread()
+        super.onDestroy()
     }
 }

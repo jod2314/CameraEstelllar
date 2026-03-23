@@ -10,8 +10,11 @@ data class AstroLensInfo(
     val maxExposureNs: Long,
     val maxAnalogIso: Int,
     val aperture: Float,
+    val availableApertures: List<Float> = emptyList(), // Lista de aperturas (Samsung S-series)
     val focalLength: Float,
     val hardwareLevel: Int,
     val supportsLowLightBoost: Boolean,
-    val hasRaw: Boolean
+    val hasRaw: Boolean,
+    val isPhysical: Boolean = false,
+    val vendorKeys: List<String> = emptyList()
 )
