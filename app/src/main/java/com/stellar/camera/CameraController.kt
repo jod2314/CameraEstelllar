@@ -44,6 +44,8 @@ class CameraController(private val context: Context) {
     
     @Volatile var isCapturing: Boolean = false
     @Volatile var isTransitioning: Boolean = false
+    private var expectedBurstCount: Int = 0
+    private var capturedBurstCount: Int = 0
 
     var onMetadataReceived: ((iso: Int, exposureNs: Long) -> Unit)? = null
     var onCaptureReadyListener: (() -> Unit)? = null
@@ -210,8 +212,10 @@ class CameraController(private val context: Context) {
     fun takeBurst(count: Int, lens: AstroLensInfo) {
         if (cameraDevice == null || captureSession == null || isCapturing) return
         isCapturing = true
+        expectedBurstCount = count
+        capturedBurstCount = 0
         
-        Log.e(TAG, "[CAPTURE] Iniciando toma de larga duración: ${currentExposureNs/1e9}s")
+        Log.e(TAG, "[CAPTURE] Iniciando ráfaga de $count fotos. Exp: ${currentExposureNs/1e9}s")
 
         try {
             val builder = cameraDevice?.createCaptureRequest(CameraDevice.TEMPLATE_MANUAL)
@@ -235,10 +239,14 @@ class CameraController(private val context: Context) {
                 }
                 override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
                     Log.e(TAG, "Capture Failed: ${failure.reason}")
-                    finalizeCapture()
+                    capturedBurstCount++
+                    checkFinalize()
                 }
             }, backgroundHandler)
-        } catch (e: Exception) { finalizeCapture() }
+        } catch (e: Exception) { 
+            isCapturing = false
+            updatePreviewSettings()
+        }
     }
 
     private fun handleRawImage(image: Image, lens: AstroLensInfo) {
@@ -301,8 +309,15 @@ class CameraController(private val context: Context) {
                 Log.e(TAG, "Error IO: ${e.message}")
             } finally { 
                 image.close() 
-                finalizeCapture()
+                capturedBurstCount++
+                checkFinalize()
             }
+        }
+    }
+
+    private fun checkFinalize() {
+        if (capturedBurstCount >= expectedBurstCount) {
+            finalizeCapture()
         }
     }
 

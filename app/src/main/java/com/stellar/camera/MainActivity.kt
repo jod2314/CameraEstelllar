@@ -155,6 +155,21 @@ class MainActivity : AppCompatActivity() {
                 override fun onStopTrackingTouch(s: android.widget.SeekBar?) {}
             })
 
+            binding.burstSeekBar.setOnSeekBarChangeListener(null)
+            binding.burstSeekBar.max = 20
+            binding.burstSeekBar.progress = state.burstCount.coerceIn(1, 20)
+            binding.burstLabel.text = "Fotos en Ráfaga: ${state.burstCount}"
+
+            binding.burstSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
+                    val count = p.coerceAtLeast(1)
+                    binding.burstLabel.text = "Fotos en Ráfaga: $count"
+                    state.burstCount = count
+                }
+                override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(s: android.widget.SeekBar?) {}
+            })
+
             val hwStr = when(lens.hardwareLevel) {
                 1 -> "FULL"
                 3 -> "LEVEL_3"
