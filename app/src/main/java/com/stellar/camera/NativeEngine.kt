@@ -7,7 +7,7 @@ import java.nio.ByteBuffer
  */
 object NativeEngine {
     init {
-        System.loadLibrary("camerastellar")
+        System.loadLibrary("native-lib")
     }
 
     external fun getNativeVersion(): String

@@ -11,17 +11,30 @@ Este archivo sirve como memoria del proyecto para el desarrollo de la aplicació
 - **Objetivo:** App creativa para captura del cielo nocturno con múltiples modos de captura, superposición/apilado (stacking), correcciones basadas en métricas estandarizadas y detección avanzada de hardware.
 
 ## Estado Actual
+- **Fase 0 (Investigación Exhaustiva):** Completada. Se ha documentado la hoja de ruta definitiva en `FASE_0_ROADMAP.md`.
+- **Fase 1 y 2 (Auditoría de Hardware y Override Manual):** Implementado en `CameraController V3.1`. Se añadieron logs detallados para exposición, ISO, y detección correcta de niveles FULL y LEVEL_3.
 - **Hito 1 (Cimentación):** Completado. App Nativa Kotlin con MVVM y Red Light Mode funcional.
-- **Hito 2 (Captura RAW):** Completado. Implementación de `CameraController` con soporte para ráfagas DNG y control manual.
-- **Hito 2.5 (UI Profesional):** Completado. Controles dinámicos de ISO (100-6400), Exposición (1s-30s) y Ráfaga.
-- **Limpieza:** Directorio React Native eliminado; proyecto puramente nativo.
-- **Infraestructura:** Skill `astro-engineer` activo y repositorio Git con historial de hitos.
+- **Hito 2 (Motor de Captura Robusto):** Completado. `CameraController V3.1` con negociación HAL v2, fallback automático y soporte inclusivo de sensores (RAW y Manual de nivel FULL).
+- **Hito 2.5 (UI Profesional):** Completado. Controles dinámicos de ISO, Exposición (1s-30s) y Ráfaga adaptativa.
+- **Infraestructura:** Skill `astro-engineer` activo y motor de captura validado como instrumento científico fiable.
 
 ## Logros Técnicos
-- Migración exitosa de arquitectura híbrida a Nativa Pura para optimización de memoria.
-- Implementación de `DngCreator` con sincronización asíncrona de metadatos.
-- Configuración de puente NDK (JNI Zero-Copy) listo para procesamiento matemático.
-- Interfaz optimizada para visión nocturna (Filtro Rojo).
+- **Escaneo Inclusivo de Sensores:** Algoritmo que detecta sensores físicos individuales con soporte RAW o Manual avanzado, evitando descartar hardware útil en gama media.
+- **Negociación HAL v2 Segura:** Implementación de `SessionParameters` con validación de FPS y fallback a modo básico si la configuración avanzada es rechazada por el dispositivo.
+- **Safe Parameter Injection:** Sistema de verificación de `availableCaptureRequestKeys` para evitar excepciones por parámetros no soportados por el sensor.
+- **Sincronización de Timestamps:** Mecanismo de emparejamiento por nanosegundos entre buffers de imagen y resultados de metadatos del sensor.
+- **Soporte Híbrido DNG/JPEG:** Guardado automático en formato DNG científico para sensores RAW y JPEG de alta fidelidad para sensores secundarios.
+- **Acceso Directo a Sensores Físicos:** Bypass de cámaras lógicas para obtener la señal pura de cada lente (Ultra-Wide, Telephoto).
+
+## Bitácora Arquitectónica y Correcciones Críticas
+- **[2024-03-25] Sincronización HAL / AIDL para Larga Exposición:** Se ha diagnosticado y documentado un fallo crítico donde el sensor recorta exposiciones largas (ej. 4s a 0.2s). Esto se debe a las restricciones introducidas en el AIDL Camera HAL (Android 13+).
+  - **Causa:** El tiempo de exposición (`SENSOR_EXPOSURE_TIME`) está estrictamente limitado por la duración del marco de la sesión (`SENSOR_FRAME_DURATION`). Si la sesión se crea sin parámetros explícitos, el HAL impone un límite de FPS alto (ej. 30 FPS, ~33ms max frame duration).
+  - **Solución Obligatoria (Patrón Open Camera):**
+    1. **Session Parameters:** Usar `SessionConfiguration.setSessionParameters()` *antes* de crear la sesión, preferiblemente con `TEMPLATE_MANUAL`.
+    2. **Frame Duration:** Establecer `SENSOR_FRAME_DURATION` al máximo soportado (ej. 30s) en los parámetros de la sesión.
+    3. **FPS Range:** Forzar un `CONTROL_AE_TARGET_FPS_RANGE` bajo (ej. `[1, 15]`).
+    4. **Stream Use Cases (API 33+):** Definir explícitamente `STILL_CAPTURE` y `PREVIEW` para optimizar el pipeline de hardware.
+    5. **Auditoría Física:** Extraer los resultados reales utilizando `TotalCaptureResult.getPhysicalCameraResult(physicalId)` o `LOGICAL_MULTI_CAMERA_ACTIVE_PHYSICAL_ID` para confirmar que el silicio no recortó la exposición.
 
 ## Próximos Pasos (Fase 3 & 4)
 - Integración de OpenCV nativo para alineación por asterismos.

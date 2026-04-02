@@ -49,6 +49,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Capturador de Errores Críticos
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("FATAL_ERROR", "CRASH EN HILO ${thread.name}: ${throwable.message}")
+            throwable.printStackTrace()
+            // No dejamos que la app muera en silencio
+        }
+
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -57,8 +64,14 @@ class MainActivity : AppCompatActivity() {
 
         cameraController.onMetadataReceived = { iso, expNs ->
             runOnUiThread {
-                binding.metadataText.text = "RAW FEEDBACK | ISO: $iso | Exp: ${String.format("%.3f", expNs/1e9)}s"
-                binding.metadataText.setTextColor(if (iso == cameraController.currentIso) 0xFF00FF00.toInt() else 0xFFFFFFFF.toInt())
+                if (!cameraController.isCapturing) {
+                    binding.metadataText.text = "SENSOR REAL | ISO: $iso | Exp Visor: ${String.format("%.3f", expNs/1e9)}s"
+                    binding.metadataText.setTextColor(if (iso == cameraController.currentIso) 0xFF00FF00.toInt() else 0xFFFFFFFF.toInt())
+                } else {
+                    val activeLens = availableLenses[currentLensIndex]
+                    binding.metadataText.text = "ADQUIRIENDO RÁFAGA ${if (activeLens.hasRaw) "RAW" else "JPEG"}..."
+                    binding.metadataText.setTextColor(0xFFFF0000.toInt())
+                }
             }
         }
 
@@ -70,15 +83,18 @@ class MainActivity : AppCompatActivity() {
         binding.captureButton.setOnClickListener {
             if (availableLenses.isEmpty()) return@setOnClickListener
             val activeLens = availableLenses[currentLensIndex]
+            val state = lensSettings[activeLens.logicalId + (activeLens.physicalId ?: "")]
+            val count = state?.burstCount ?: 1
+            
+            android.util.Log.e("AstroUI", "BOTÓN CAPTURA: Solicitando $count fotos a ${activeLens.name}")
             setControlsEnabled(false)
-            cameraController.takeBurst(binding.burstSeekBar.progress.coerceAtLeast(1), activeLens)
+            cameraController.takeBurst(count, activeLens)
         }
 
         binding.switchLensButton.setOnClickListener { rotateLens() }
-        
-        binding.closeAuditButton.setOnClickListener {
-            binding.auditPanel.visibility = android.view.View.GONE
-        }
+
+        // Ocultar permanentemente el panel de auditoría
+        binding.auditPanel.visibility = android.view.View.GONE
 
         // Registrar el callback UNA SOLA VEZ
         binding.cameraPreview.holder.addCallback(surfaceCallback)
@@ -123,36 +139,44 @@ class MainActivity : AppCompatActivity() {
             binding.isoSeekBar.setOnSeekBarChangeListener(null)
             binding.isoSeekBar.max = lens.maxAnalogIso
             binding.isoSeekBar.progress = state.iso
-            binding.isoLabel.text = "ISO: ${state.iso}"
+            binding.isoLabel.text = "ISO OBJETIVO: ${state.iso}"
             
             binding.isoSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
                     val newIso = p.coerceAtLeast(100)
-                    binding.isoLabel.text = "ISO: $newIso"
+                    binding.isoLabel.text = "ISO OBJETIVO: $newIso"
                     state.iso = newIso
                     cameraController.currentIso = newIso
                 }
                 override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
                 override fun onStopTrackingTouch(s: android.widget.SeekBar?) { 
+                    android.util.Log.e("AstroUI", "ISO Cambiado a: ${state.iso}")
                     cameraController.updatePreviewSettings() 
                 }
             })
 
             binding.exposureSeekBar.setOnSeekBarChangeListener(null)
-            val maxSec = 30 // BYPASS: Permitimos hasta 30s manuales para probar el hardware
-            binding.exposureSeekBar.max = maxSec
-            binding.exposureSeekBar.progress = (state.exposureNs / 1_000_000_000L).toInt().coerceIn(1, maxSec)
-            binding.exposureLabel.text = "Exp: ${(state.exposureNs/1e9).toInt()}s"
+            
+            // Slider de Exposición: Usaremos décimas de segundo (10 = 1s, 5 = 0.5s, 300 = 30s) para soportar sensores limitados.
+            val maxTenths = (lens.maxExposureNs / 100_000_000L).toInt().coerceAtLeast(1)
+            binding.exposureSeekBar.max = maxTenths
+            
+            val currentTenths = (state.exposureNs / 100_000_000L).toInt().coerceIn(1, maxTenths)
+            binding.exposureSeekBar.progress = currentTenths
+            binding.exposureLabel.text = "EXP OBJETIVO: ${currentTenths / 10.0}s"
 
             binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
-                    val newSec = p.coerceAtLeast(1)
-                    binding.exposureLabel.text = "INYECTANDO: ${newSec}s"
-                    state.exposureNs = newSec * 1_000_000_000L
+                    val tenths = p.coerceAtLeast(1)
+                    binding.exposureLabel.text = "EXP OBJETIVO: ${tenths / 10.0}s"
+                    state.exposureNs = tenths * 100_000_000L
                     cameraController.currentExposureNs = state.exposureNs
                 }
                 override fun onStartTrackingTouch(s: android.widget.SeekBar?) {}
-                override fun onStopTrackingTouch(s: android.widget.SeekBar?) {}
+                override fun onStopTrackingTouch(s: android.widget.SeekBar?) {
+                    android.util.Log.e("AstroUI", "EXP Cambiada a: ${state.exposureNs/1e9}s")
+                    cameraController.updatePreviewSettings()
+                }
             })
 
             binding.burstSeekBar.setOnSeekBarChangeListener(null)
@@ -195,39 +219,10 @@ class MainActivity : AppCompatActivity() {
         cameraController.startBackgroundThread()
         val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         availableLenses = cameraController.scanAvailableLenses(manager)
-        
-        // Generar Informe de Auditoría
-        val report = StringBuilder()
-        report.append("Dispositivos de Imagen Detectados:\n")
-        report.append("---------------------------------\n")
-        availableLenses.forEachIndexed { index, lens ->
-            val hw = when(lens.hardwareLevel) {
-                1 -> "FULL"
-                3 -> "LEVEL_3"
-                2 -> "LEGACY"
-                else -> "LIMITED"
-            }
-            val type = if (lens.isPhysical) "FÍSICO" else "LÓGICO"
-            report.append("S$index: ${lens.name}\n")
-            report.append("  > Tipo: $type\n")
-            report.append("  > ID: L:${lens.logicalId} / P:${lens.physicalId ?: "None"}\n")
-            report.append("  > Hardware Level: $hw\n")
-            report.append("  > ISO Analógico Máx: ${lens.maxAnalogIso}\n")
-            report.append("  > Exp. Máxima: ${String.format("%.1f", lens.maxExposureNs/1e9)}s\n")
-            report.append("  > RAW Sensor: ${if(lens.hasRaw) "SI ✅" else "NO ❌"}\n")
-            if (lens.vendorKeys.isNotEmpty()) {
-                report.append("  > Vendor Tags: ${lens.vendorKeys.size} detectadas\n")
-                val samsungExp = lens.vendorKeys.find { it.contains("exposure") || it.contains("shutter") }
-                if (samsungExp != null) report.append("    [!] Llave de Exp. Extendida: SI\n")
-            }
-            report.append("---------------------------------\n")
-        }
-        
+
         runOnUiThread {
-            binding.auditText.text = report.toString()
             if (availableLenses.isEmpty()) {
-                binding.auditText.text = "ERROR: No se detectaron sensores compatibles con RAW/LEVEL_3"
-                binding.auditText.setTextColor(0xFFFF0000.toInt())
+                Toast.makeText(this@MainActivity, "ERROR: No se detectaron sensores RAW", Toast.LENGTH_LONG).show()
             }
         }
 

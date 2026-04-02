@@ -1,9 +1,5 @@
 [
     {
-        "merged": "C:\\Users\\jodac\\.gradle\\daemon\\8.13\\com.stellar.camera.app-mergeDebugResources-35:\\layout\\activity_main.xml",
-        "source": "C:\\Users\\jodac\\.gradle\\daemon\\8.13\\com.stellar.camera.app-main-38:\\layout\\activity_main.xml"
-    },
-    {
         "merged": "com.stellar.camera.app-mergeDebugResources-35:/layout/activity_main.xml",
         "source": "com.stellar.camera.app-main-38:/layout/activity_main.xml"
     }
