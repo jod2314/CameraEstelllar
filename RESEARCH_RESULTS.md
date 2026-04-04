@@ -1,53 +1,55 @@
-# Investigación Técnica: Camera2 API para CameraStellar v3
+# Investigación Técnica: CameraStellar v3 - Resultados de Auditoría y Roadmap Científico
 
-Este documento detalla los hallazgos de la investigación sobre el control manual avanzado y la gestión de sesiones para astrofotografía en Android.
+Este documento consolida la ingeniería forense, el análisis de silicio y la estrategia de implementación para el control manual de grado profesional.
 
-## 1. Acceso y Selección de Lentes (Hardware)
-Para obtener el control total de los lentes, debemos iterar sobre `CameraManager.getCameraIdList()` y filtrar por capacidades específicas.
+## 1. Análisis Forense: Resolviendo el Colapso del Hardware
+Se han identificado los fallos raíz que desestabilizan el pipeline en ráfagas RAW largas.
 
-### Criterios de Selección para Astrofotografía:
-| Característica | Propiedad CameraCharacteristics | Valor Requerido |
+### 1.1. Pánico del JankMonitor y Timestamps
+- **Síntoma:** Advertencias `JankMonitorFacade: PHOTO > abs Δ(result sensor timestamp) = 80ms`.
+- **Causa:** El sistema asume que el hilo de cámara se ha colgado al dilatar el `SENSOR_FRAME_DURATION` para exposiciones de >10s.
+- **Solución:** Aislamiento del pipeline en un `ForegroundService` (Silo de Procesamiento) de tipo `camera|mediaProcessing`.
+
+### 1.2. Inestabilidad por OIS (Estabilización)
+- **Síntoma:** `OisListener: Null pointer for OIS data`.
+- **Causa:** El driver intenta consultar el giroscopio para OIS mientras los algoritmos 3A están en `OFF`.
+- **Solución:** Inyección mandatoria de `LENS_OPTICAL_STABILIZATION_MODE_OFF`.
+
+## 2. Micro-Optimización del CaptureRequest (Manual Override)
+Para garantizar linealidad absoluta y evadir filtros ISP destructivos:
+
+| Parámetro | Valor | Propósito |
 | :--- | :--- | :--- |
-| **Control Manual** | `REQUEST_AVAILABLE_CAPABILITIES` | `MANUAL_SENSOR` |
-| **Soporte RAW** | `REQUEST_AVAILABLE_CAPABILITIES` | `RAW` |
-| **Exposición Larga** | `SENSOR_INFO_EXPOSURE_TIME_RANGE` | Max > 10s (1e10 ns) |
-| **Enfoque Infinito** | `LENS_INFO_MINIMUM_FOCUS_DISTANCE` | 0.0 (Soportado) |
+| `EDGE_MODE` | `OFF` | Evitar realce de bordes artificial en estrellas. |
+| `NOISE_REDUCTION_MODE` | `OFF` | Preservar el grano RAW para Sigma-Clipping. |
+| `TONEMAP_MODE` | `OFF` / `FAST` | Impedir la compresión del rango dinámico. |
+| `SHADING_MODE` | `OFF` | Evitar corrección de viñeteo destructiva. |
+| `STATISTICS_LENS_SHADING_MAP_MODE` | `ON` | Extraer mapa de calibración Flat-Field. |
 
-> **Nota Crítica:** Muchos dispositivos modernos exponen "Cámaras Lógicas". Para astrofotografía, es preferible identificar las "Cámaras Físicas" subyacentes mediante `characteristics.physicalCameraIds` para evitar procesamientos de software indeseados.
+## 3. Arquitectura de Datos y Memoria (Zero-Copy)
 
-## 2. Configuración de Sesión y Flujos (Pipeline)
-El error de recorte de exposición se soluciona mediante la configuración correcta de la sesión.
+### 3.1. Pipeline AHardwareBuffer
+- **Objetivo:** Eliminar la presión sobre el Garbage Collector (GC) de Java.
+- **Implementación:** Uso de `AImage_getHardwareBuffer` en el NDK para mapear el buffer del sensor directamente a `cv::Mat` (OpenCV) o texturas de Vulkan sin copias.
 
-### Protocolo de Creación de Sesión (Anti-Clipping):
-1. **Definir Superficies:** `Preview` (SurfaceView) y `Capture` (ImageReader para DNG/JPEG).
-2. **Configurar Casos de Uso (API 33+):**
-   - Preview: `STREAM_USE_CASE_PREVIEW`
-   - Capture: `STREAM_USE_CASE_STILL_CAPTURE`
-3. **Parámetros de Sesión (Crucial):**
-   - Crear un `CaptureRequest` inicial con `TEMPLATE_MANUAL`.
-   - Establecer `CONTROL_AE_TARGET_FPS_RANGE` a `[MIN, MIN]` (ej. [1, 15] o [1, 1]).
-   - Pasar este request a `SessionConfiguration.setSessionParameters()`.
+### 3.2. Alineación Android 15 (16 KB)
+- **Requerimiento:** Compilación obligatoria con `-Wl,-z,max-page-size=16384`.
+- **Impacto:** Optimización del TLB para ráfagas masivas de 48MP.
 
-## 3. Control de Parámetros de Captura
-Para garantizar que el sensor respete los valores científicos:
+## 4. Roadmap de Implementación (Hitos Críticos)
 
-- **ISO:** `CaptureRequest.SENSOR_SENSITIVITY`.
-- **Exposición:** `CaptureRequest.SENSOR_EXPOSURE_TIME` (en nanosegundos).
-- **Apertura:** `CaptureRequest.LENS_APERTURE` (si es variable, raro en móviles).
-- **Enfoque:** `CaptureRequest.LENS_FOCUS_DISTANCE` fijado a `0.0f` para infinito.
+### Hito 1: Blindaje y Orquestación (Implementado)
+- Negociación HAL v2 con `SessionParameters`.
+- Integración de `AstroCaptureService` para prioridad de sistema.
+- Uso de `WakeLock` para evitar el Deep Sleep en exposiciones >30s.
 
-### Verificación de Resultados:
-Siempre debemos auditar el `TotalCaptureResult` devuelto en el callback:
-```kotlin
-val realExposure = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
-if (realExposure != requestedExposure) {
-    Log.e("Astro", "El HAL recortó la exposición: $realExposure vs $requestedExposure")
-}
-```
+### Hito 2: Calibración Estelar (NDK)
+- Implementación de sustracción de "Dark Frame" en C++.
+- Interpolación bicúbica del `LensShadingMap` para corrección Flat-Field en tiempo real.
 
-## 4. Referencias Bibliográficas
-1. **Documentación Oficial Android (Sesiones):** [Capture Sessions & Requests](https://developer.android.com/media/camera/camera2/capture-sessions-requests)
-2. **Referencia de Clase CameraManager:** [CameraManager Docs](https://developer.android.com/reference/android/hardware/camera2/CameraManager)
-3. **Control Manual (TEMPLATE_MANUAL):** [CameraDevice Templates](https://developer.android.com/reference/android/hardware/camera2/CameraDevice#TEMPLATE_MANUAL)
-4. **Optimización de Flujos (Stream Use Cases):** [OutputConfiguration.setStreamUseCase](https://developer.android.com/reference/android/hardware/camera2/params/OutputConfiguration#setStreamUseCase(long))
-5. **DngCreator (Metadatos RAW):** [DngCreator Reference](https://developer.android.com/reference/android/hardware/camera2/DngCreator)
+### Hito 3: Motor de Apilado (GPU/Vulkan)
+- Compute Shaders en SPIR-V para alineación por asterismos (Astroalign).
+- Algoritmo de Sigma-clipping para reducción de ruido térmico.
+
+---
+*Documento actualizado según la Hoja de Ruta de Ingeniería de Precisión - 4 de Abril de 2026*

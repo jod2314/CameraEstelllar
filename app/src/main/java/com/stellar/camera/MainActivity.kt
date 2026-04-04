@@ -157,18 +157,19 @@ class MainActivity : AppCompatActivity() {
 
             binding.exposureSeekBar.setOnSeekBarChangeListener(null)
             
-            // Slider de Exposición: Usaremos décimas de segundo (10 = 1s, 5 = 0.5s, 300 = 30s) para soportar sensores limitados.
+            // Slider de Exposición: Usaremos décimas de segundo (10 = 1s, 5 = 0.5s, 300 = 30s)
+            // Blindaje: Asegurar que maxTenths sea al menos 1 para evitar divisiones por cero
             val maxTenths = (lens.maxExposureNs / 100_000_000L).toInt().coerceAtLeast(1)
             binding.exposureSeekBar.max = maxTenths
             
             val currentTenths = (state.exposureNs / 100_000_000L).toInt().coerceIn(1, maxTenths)
             binding.exposureSeekBar.progress = currentTenths
-            binding.exposureLabel.text = "EXP OBJETIVO: ${currentTenths / 10.0}s"
+            binding.exposureLabel.text = "EXP OBJETIVO: ${String.format("%.1f", currentTenths / 10.0)}s"
 
             binding.exposureSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(s: android.widget.SeekBar?, p: Int, f: Boolean) {
                     val tenths = p.coerceAtLeast(1)
-                    binding.exposureLabel.text = "EXP OBJETIVO: ${tenths / 10.0}s"
+                    binding.exposureLabel.text = "EXP OBJETIVO: ${String.format("%.1f", tenths / 10.0)}s"
                     state.exposureNs = tenths * 100_000_000L
                     cameraController.currentExposureNs = state.exposureNs
                 }

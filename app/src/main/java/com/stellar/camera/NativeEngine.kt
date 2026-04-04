@@ -1,19 +1,21 @@
 package com.stellar.camera
 
-import java.nio.ByteBuffer
+import android.hardware.HardwareBuffer
 
 /**
  * NativeEngine: Puente JNI hacia el motor de fotografía computacional en C++.
+ * Optimizado para transferencia Zero-Copy mediante HardwareBuffer.
  */
 object NativeEngine {
     init {
-        System.loadLibrary("native-lib")
+        System.loadLibrary("camerastellar")
     }
 
     external fun getNativeVersion(): String
     
     /**
-     * Pasa el buffer de la cámara directamente a C++ sin copias de memoria.
+     * Procesa una imagen RAW directamente desde la memoria del hardware (Zero-Copy).
+     * @param buffer El buffer de hardware obtenido de Image.hardwareBuffer
      */
-    external fun processRawBuffer(buffer: ByteBuffer, width: Int, height: Int)
+    external fun processHardwareBuffer(buffer: HardwareBuffer, timestamp: Long)
 }
