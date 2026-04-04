@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="Theme.CameraStellar" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Tema optimizado para uso nocturno: Filtro Rojo Nativo -->
-        <item name="colorPrimary">#FF0000</item>
-        <item name="colorOnPrimary">#000000</item>
-        <item name="android:windowBackground">#000000</item>
-    </style>
-</resources>
