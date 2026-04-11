@@ -127,13 +127,11 @@ class CameraFragment : Fragment() {
                     Log.d(TAG, "Image saved: ${photoResult.file.absolutePath}")
                     
                     lifecycleScope.launch {
-                        navController.navigate(
-                            CameraFragmentDirections
-                                .actionCameraToJpegViewer(photoResult.file.absolutePath)
-                                .setOrientation(photoResult.orientation)
-                                .setDepth(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
-                                        photoResult.format == ImageFormat.DEPTH_JPEG)
-                        )
+                        android.widget.Toast.makeText(
+                            requireContext(), 
+                            "Foto guardada: ${photoResult.file.name}", 
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             )

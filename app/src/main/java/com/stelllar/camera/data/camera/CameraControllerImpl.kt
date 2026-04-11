@@ -6,7 +6,9 @@ import android.graphics.ImageFormat
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
+import android.media.MediaScannerConnection
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Log
@@ -248,7 +250,17 @@ class CameraControllerImpl @Inject constructor(
 
     private fun createFile(extension: String): File {
         val sdf = SimpleDateFormat("yyyy_MM_dd_HH_mm_ss_SSS", Locale.US)
-        return File(context.filesDir, "IMG_${sdf.format(Date())}.$extension")
+        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "CameraStellar")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        return File(dir, "IMG_${sdf.format(Date())}.$extension")
+    }
+
+    private fun scanFile(file: File) {
+        MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { path, uri ->
+            Log.d(TAG, "Scanned $path -> uri=$uri")
+        }
     }
 
     companion object {
