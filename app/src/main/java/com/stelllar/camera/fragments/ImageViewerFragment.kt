@@ -16,6 +16,7 @@
 
 package com.stelllar.camera.fragments
 
+import dagger.hilt.android.AndroidEntryPoint
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -39,7 +40,7 @@ import java.io.BufferedInputStream
 import java.io.File
 import kotlin.math.max
 
-
+@AndroidEntryPoint
 class ImageViewerFragment : Fragment() {
 
     /** AndroidX navigation arguments */

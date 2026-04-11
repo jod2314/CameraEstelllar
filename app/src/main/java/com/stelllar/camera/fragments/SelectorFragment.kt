@@ -16,6 +16,7 @@
 
 package com.stelllar.camera.fragments
 
+import dagger.hilt.android.AndroidEntryPoint
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ImageFormat
@@ -34,6 +35,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.stelllar.camera.utils.GenericListAdapter
 import com.stelllar.camera.R
 
+@AndroidEntryPoint
 class SelectorFragment : Fragment() {
 
     override fun onCreateView(

@@ -4,7 +4,7 @@
             "outputFile": "com.stelllar.camera.app-mergeDebugResources-47:/values-en-rIN/values-en-rIN.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\f0911a69f0c74dfcaf4a58b3470634c5\\transformed\\core-1.13.1\\res\\values-en-rIN\\values-en-rIN.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\fc2aae543313c8fccec8178e7687d413\\transformed\\core-1.13.1\\res\\values-en-rIN\\values-en-rIN.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9",
                         "startColumns": "4,4,4,4,4,4,4,4",
@@ -21,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\4257b7a817d344a62cbd8199694e6b0d\\transformed\\navigation-ui-2.7.7\\res\\values-en-rIN\\values-en-rIN.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\f8d3ddae2ff63855ac0971b551d07dec\\transformed\\navigation-ui-2.7.7\\res\\values-en-rIN\\values-en-rIN.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",
@@ -38,7 +38,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\1f86e170fc62fa4bef949b0755d67b12\\transformed\\appcompat-1.7.0\\res\\values-en-rIN\\values-en-rIN.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\8c27c3a27cd6b2783eef56c14876ca31\\transformed\\appcompat-1.7.0\\res\\values-en-rIN\\values-en-rIN.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",

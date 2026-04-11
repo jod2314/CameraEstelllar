@@ -16,6 +16,7 @@
 
 package com.stelllar.camera.fragments
 
+import dagger.hilt.android.AndroidEntryPoint
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -33,6 +34,7 @@ private val PERMISSIONS_REQUIRED = arrayOf(Manifest.permission.CAMERA)
 /**
  * This [Fragment] requests permissions and, once granted, it will navigate to the next fragment
  */
+@AndroidEntryPoint
 class PermissionsFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {

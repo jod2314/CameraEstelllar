@@ -25,6 +25,7 @@
     <uses-feature android:name="android.hardware.camera.raw" android:required="false" />
 
     <application
+        android:name=".CameraStellarApplication"
         android:allowBackup="true"
         android:fullBackupContent="true"
         android:label="@string/app_name"

@@ -16,11 +16,13 @@
 
 package com.stelllar.camera
 
+import dagger.hilt.android.AndroidEntryPoint
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import com.stelllar.camera.databinding.ActivityCameraBinding
 
+@AndroidEntryPoint
 class CameraActivity : AppCompatActivity() {
 
     private lateinit var activityCameraBinding: ActivityCameraBinding
