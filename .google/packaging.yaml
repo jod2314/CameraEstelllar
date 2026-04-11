@@ -6,10 +6,10 @@
 ---
 status:       PUBLISHED
 technologies: [Android]
-categories:   [Media, Camera, Camera2]
-languages:    [Java]
+categories:   [Camera]
+languages:    [Kotlin]
 solutions:    [Mobile]
-github:       android-Camera2Raw
+github:       android/camera
 level:        INTERMEDIATE
 icon:         screenshots/icon-web.png
 apiRefs:

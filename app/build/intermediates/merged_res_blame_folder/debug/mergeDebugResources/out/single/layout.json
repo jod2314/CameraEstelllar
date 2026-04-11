@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.stelllar.camera.app-mergeDebugResources-48:/layout/activity_camera.xml",
+        "source": "com.stelllar.camera.app-main-51:/layout/activity_camera.xml"
+    },
+    {
+        "merged": "com.stelllar.camera.app-mergeDebugResources-48:/layout/fragment_camera.xml",
+        "source": "com.stelllar.camera.app-main-51:/layout/fragment_camera.xml"
+    }
+]

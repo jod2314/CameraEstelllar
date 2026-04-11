@@ -1,0 +1,23 @@
+R_DEF: Internal format may change without notice
+local
+drawable ic_launcher
+drawable ic_photo
+id action_camera_to_jpeg_viewer
+id action_camera_to_permissions
+id action_permissions_to_selector
+id action_selector_to_camera
+id camera_fragment
+id capture_button
+id fragment_container
+id image_viewer_fragment
+id nav_graph
+id overlay
+id permissions_fragment
+id selector_fragment
+id view_finder
+layout activity_camera
+layout fragment_camera
+navigation nav_graph
+string app_name
+string capture
+style AppTheme
