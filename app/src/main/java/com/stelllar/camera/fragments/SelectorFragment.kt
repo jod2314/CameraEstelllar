@@ -24,6 +24,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.os.Bundle
+import android.util.Range
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -56,9 +57,14 @@ class SelectorFragment : Fragment() {
 
             val cameraList = enumerateCameras(cameraManager)
 
-            val layoutId = android.R.layout.simple_list_item_1
+            val layoutId = android.R.layout.simple_list_item_2
             adapter = GenericListAdapter(cameraList, itemLayoutId = layoutId) { view, item, _ ->
                 view.findViewById<TextView>(android.R.id.text1).text = item.title
+                val subtitleView = view.findViewById<TextView>(android.R.id.text2)
+                subtitleView.text = item.subtitle
+                subtitleView.maxLines = 4
+                subtitleView.setLineSpacing(0f, 1.2f)
+
                 view.setOnClickListener {
                     Navigation.findNavController(requireActivity(), R.id.fragment_container)
                             .navigate(SelectorFragmentDirections.actionSelectorToCamera(
@@ -72,7 +78,7 @@ class SelectorFragment : Fragment() {
     companion object {
 
         /** Helper class used as a data holder for each selectable camera format item */
-        private data class FormatItem(val title: String, val cameraId: String, val format: Int)
+        private data class FormatItem(val title: String, val subtitle: String, val cameraId: String, val format: Int)
 
         /** Helper function used to convert a lens orientation enum into a human-readable string */
         private fun lensOrientationString(value: Int) = when(value) {
@@ -96,7 +102,6 @@ class SelectorFragment : Fragment() {
                         CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE) ?: false
             }
 
-
             // Iterate over the list of cameras and return all the compatible ones
             cameraIds.forEach { id ->
                 val characteristics = cameraManager.getCameraCharacteristics(id)
@@ -109,16 +114,38 @@ class SelectorFragment : Fragment() {
                 val outputFormats = characteristics.get(
                         CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.outputFormats
 
+                // Extract hardware info
+                val hwLevelInt = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)
+                val hwLevelStr = when (hwLevelInt) {
+                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY -> "Legacy"
+                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED -> "Limited"
+                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL -> "Full"
+                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3 -> "Level 3"
+                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_EXTERNAL -> "External"
+                    else -> "Unknown"
+                }
+
+                val isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+                val isoStr = isoRange?.let { "${it.lower} - ${it.upper}" } ?: "N/A"
+
+                val expRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
+                val expStr = expRange?.let { 
+                    val maxSecs = it.upper / 1_000_000_000.0
+                    "Max: %.1fs".format(maxSecs)
+                } ?: "N/A"
+
+                val subtitle = "HW Level: $hwLevelStr | ISO: $isoStr\nExp: $expStr"
+
                 // All cameras *must* support JPEG output so we don't need to check characteristics
                 availableCameras.add(FormatItem(
-                        "$orientation JPEG ($id)", id, ImageFormat.JPEG))
+                        "$orientation JPEG ($id)", subtitle, id, ImageFormat.JPEG))
 
                 // Return cameras that support RAW capability
                 if (capabilities.contains(
                                 CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) &&
                         outputFormats.contains(ImageFormat.RAW_SENSOR)) {
                     availableCameras.add(FormatItem(
-                            "$orientation RAW ($id)", id, ImageFormat.RAW_SENSOR))
+                            "$orientation RAW ($id)", subtitle, id, ImageFormat.RAW_SENSOR))
                 }
 
                 // Return cameras that support JPEG DEPTH capability
@@ -126,7 +153,7 @@ class SelectorFragment : Fragment() {
                             CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_DEPTH_OUTPUT) &&
                         outputFormats.contains(ImageFormat.DEPTH_JPEG)) {
                     availableCameras.add(FormatItem(
-                            "$orientation DEPTH ($id)", id, ImageFormat.DEPTH_JPEG))
+                            "$orientation DEPTH ($id)", subtitle, id, ImageFormat.DEPTH_JPEG))
                 }
             }
 
