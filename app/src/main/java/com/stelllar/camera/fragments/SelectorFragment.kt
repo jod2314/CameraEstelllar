@@ -128,9 +128,10 @@ class SelectorFragment : Fragment() {
                 val isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
                 val isoStr = isoRange?.let { "${it.lower} - ${it.upper}" } ?: "N/A"
 
-                val expRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
-                val expStr = expRange?.let { 
-                    val maxSecs = it.upper / 1_000_000_000.0
+                // Usamos MAX_FRAME_DURATION como la verdadera Exposición Máxima desbloqueada empíricamente
+                val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
+                val expStr = maxFrameDuration?.let { 
+                    val maxSecs = it / 1_000_000_000.0
                     "Max: %.1fs".format(maxSecs)
                 } ?: "N/A"
 
