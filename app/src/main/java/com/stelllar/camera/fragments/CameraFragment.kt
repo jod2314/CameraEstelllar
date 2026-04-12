@@ -124,12 +124,12 @@ class CameraFragment : Fragment() {
                     fragmentCameraBinding.viewFinder.post(animationTask)
                 },
                 onPhotoSaved = { photoResult ->
-                    Log.d(TAG, "Image saved: ${photoResult.file.absolutePath}")
+                    Log.d(TAG, "Image saved: ${photoResult.uriString}")
                     
                     lifecycleScope.launch {
                         android.widget.Toast.makeText(
                             requireContext(), 
-                            "Foto guardada: ${photoResult.file.name}", 
+                            "Foto guardada: ${photoResult.name}", 
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }

@@ -1,16 +1,19 @@
 package com.stelllar.camera.data.camera
 
 import android.annotation.SuppressLint
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.ImageFormat
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
 import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.os.Handler
 import android.os.HandlerThread
+import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import androidx.exifinterface.media.ExifInterface
@@ -83,17 +86,9 @@ class CameraControllerImpl @Inject constructor(
         val result = captureImage(onCaptureStarted)
         
         Log.d(TAG, "Result received: $result")
-        val output = saveResult(result)
-        Log.d(TAG, "Image saved: ${output.absolutePath}")
+        val photoResult = saveResult(result)
+        Log.d(TAG, "Image saved to MediaStore: ${photoResult.uriString}")
 
-        if (output.extension == "jpg") {
-            val exif = ExifInterface(output.absolutePath)
-            exif.setAttribute(ExifInterface.TAG_ORIENTATION, result.orientation.toString())
-            exif.saveAttributes()
-            Log.d(TAG, "EXIF metadata saved: ${output.absolutePath}")
-        }
-        
-        val photoResult = PhotoResult(output, result.format, result.orientation)
         result.close()
         photoResult
     }
@@ -218,48 +213,53 @@ class CameraControllerImpl @Inject constructor(
         }, cameraHandler)
     }
 
-    private suspend fun saveResult(result: CombinedCaptureResult): File = suspendCoroutine { cont ->
-        when (result.format) {
-            ImageFormat.JPEG, ImageFormat.DEPTH_JPEG -> {
-                val buffer = result.image.planes[0].buffer
-                val bytes = ByteArray(buffer.remaining()).apply { buffer.get(this) }
-                try {
-                    val output = createFile("jpg")
-                    FileOutputStream(output).use { it.write(bytes) }
-                    cont.resume(output)
-                } catch (exc: IOException) {
-                    cont.resumeWithException(exc)
-                }
-            }
-            ImageFormat.RAW_SENSOR -> {
-                val dngCreator = DngCreator(characteristics, result.metadata)
-                try {
-                    val output = createFile("dng")
-                    FileOutputStream(output).use { dngCreator.writeImage(it, result.image) }
-                    cont.resume(output)
-                } catch (exc: IOException) {
-                    cont.resumeWithException(exc)
-                }
-            }
-            else -> {
-                val exc = RuntimeException("Unknown image format: ${result.image.format}")
-                cont.resumeWithException(exc)
-            }
-        }
-    }
-
-    private fun createFile(extension: String): File {
+    private suspend fun saveResult(result: CombinedCaptureResult): PhotoResult = suspendCoroutine { cont ->
+        val extension = if (result.format == ImageFormat.RAW_SENSOR) "dng" else "jpg"
+        val mimeType = if (result.format == ImageFormat.RAW_SENSOR) "image/x-adobe-dng" else "image/jpeg"
         val sdf = SimpleDateFormat("yyyy_MM_dd_HH_mm_ss_SSS", Locale.US)
-        val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "CameraStellar")
-        if (!dir.exists()) {
-            dir.mkdirs()
-        }
-        return File(dir, "IMG_${sdf.format(Date())}.$extension")
-    }
+        val fileName = "IMG_${sdf.format(Date())}.$extension"
 
-    private fun scanFile(file: File) {
-        MediaScannerConnection.scanFile(context, arrayOf(file.absolutePath), null) { path, uri ->
-            Log.d(TAG, "Scanned $path -> uri=$uri")
+        val values = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Images.Media.MIME_TYPE, mimeType)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/CameraStellar")
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+
+        val resolver = context.contentResolver
+        val uri: Uri? = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+
+        if (uri == null) {
+            cont.resumeWithException(IOException("No se pudo crear el URI en MediaStore para $fileName"))
+            return@suspendCoroutine
+        }
+
+        try {
+            resolver.openOutputStream(uri)?.use { outputStream ->
+                if (result.format == ImageFormat.RAW_SENSOR) {
+                    val dngCreator = DngCreator(characteristics, result.metadata)
+                    dngCreator.writeImage(outputStream, result.image)
+                } else {
+                    val buffer = result.image.planes[0].buffer
+                    val bytes = ByteArray(buffer.remaining()).apply { buffer.get(this) }
+                    outputStream.write(bytes)
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            }
+
+            cont.resume(PhotoResult(uri.toString(), fileName, result.format, result.orientation))
+        } catch (exc: IOException) {
+            if (uri != null) {
+                resolver.delete(uri, null, null)
+            }
+            cont.resumeWithException(exc)
         }
     }
 

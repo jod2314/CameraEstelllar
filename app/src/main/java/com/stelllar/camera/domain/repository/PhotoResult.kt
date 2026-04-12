@@ -1,9 +1,8 @@
 package com.stelllar.camera.domain.repository
 
-import java.io.File
-
 data class PhotoResult(
-    val file: File,
+    val uriString: String,
+    val name: String,
     val format: Int,
     val orientation: Int
 )
