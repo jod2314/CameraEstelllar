@@ -134,7 +134,13 @@ class SelectorFragment : Fragment() {
                     "Max: %.1fs".format(maxSecs)
                 } ?: "N/A"
 
-                val subtitle = "HW Level: $hwLevelStr | ISO: $isoStr\nExp: $expStr"
+                val pixelArraySize = characteristics.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                val mpStr = pixelArraySize?.let {
+                    val mp = (it.width * it.height) / 1_000_000.0
+                    "%.1f MP".format(mp)
+                } ?: "N/A"
+
+                val subtitle = "HW Level: $hwLevelStr | $mpStr\nISO: $isoStr | Exp: $expStr"
 
                 // All cameras *must* support JPEG output so we don't need to check characteristics
                 availableCameras.add(FormatItem(

@@ -138,13 +138,51 @@ class CameraControllerImpl @Inject constructor(
         targets: List<Surface>,
         handler: Handler? = null
     ): CameraCaptureSession = suspendCoroutine { cont ->
-        device.createCaptureSession(targets, object : CameraCaptureSession.StateCallback() {
+        val stateCallback = object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(session: CameraCaptureSession) = cont.resume(session)
             override fun onConfigureFailed(session: CameraCaptureSession) {
                 val exc = RuntimeException("Camera ${device.id} session configuration failed")
                 cont.resumeWithException(exc)
             }
-        }, handler)
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            // Find the lowest FPS range (e.g., [1, 15] or [7, 30])
+            val fpsRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+            val lowestFpsRange = fpsRanges?.minByOrNull { it.upper }
+
+            // Find the maximum frame duration for long exposure
+            val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
+
+            // Setup initial session parameters to unlock HAL restrictions
+            val sessionParams = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                if (lowestFpsRange != null) {
+                    set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, lowestFpsRange)
+                }
+                if (maxFrameDuration != null) {
+                    set(CaptureRequest.SENSOR_FRAME_DURATION, maxFrameDuration)
+                }
+            }.build()
+
+            val outputConfigs = targets.map { android.hardware.camera2.params.OutputConfiguration(it) }
+            val sessionConfig = android.hardware.camera2.params.SessionConfiguration(
+                android.hardware.camera2.params.SessionConfiguration.SESSION_REGULAR,
+                outputConfigs,
+                { runnable -> handler?.post(runnable) ?: runnable.run() },
+                stateCallback
+            )
+            sessionConfig.sessionParameters = sessionParams
+            
+            try {
+                device.createCaptureSession(sessionConfig)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create session with HAL v2 params, falling back to legacy", e)
+                device.createCaptureSession(targets, stateCallback, handler)
+            }
+        } else {
+            device.createCaptureSession(targets, stateCallback, handler)
+        }
     }
 
     private suspend fun captureImage(onCaptureStarted: () -> Unit): CombinedCaptureResult = suspendCancellableCoroutine { cont ->
@@ -159,6 +197,13 @@ class CameraControllerImpl @Inject constructor(
 
         val captureRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
             addTarget(imageReader.surface)
+            
+            // Forzar larga exposición desactivando Auto-Exposure y empujando el Frame Duration
+            set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+            val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
+            if (maxFrameDuration != null) {
+                set(CaptureRequest.SENSOR_FRAME_DURATION, maxFrameDuration)
+            }
         }
         
         session.capture(captureRequest.build(), object : CameraCaptureSession.CaptureCallback() {
