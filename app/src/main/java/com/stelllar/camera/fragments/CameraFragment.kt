@@ -136,6 +136,25 @@ class CameraFragment : Fragment() {
                 }
             )
         }
+
+        // --- MODO EXPERIMENTAL (Rama: experimento-sensores) ---
+        // Ejecutar el motor de sondeo al mantener presionado el botón de captura
+        fragmentCameraBinding.captureButton.setOnLongClickListener {
+            android.widget.Toast.makeText(
+                requireContext(), 
+                "🚀 Iniciando Motor de Sondeo...\nRevisa el Logcat de Android Studio", 
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            
+            lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                try {
+                    com.stelllar.camera.data.camera.SensorProber(requireContext(), cameraManager).runProbe(args.cameraId)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Sondeo fallido", e)
+                }
+            }
+            true // Indica que consumimos el evento long-click
+        }
     }
 
     private fun setupObservers() {
