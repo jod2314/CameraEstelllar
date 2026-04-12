@@ -132,7 +132,12 @@ class SelectorFragment : Fragment() {
                 val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
                 val expStr = maxFrameDuration?.let { 
                     val maxSecs = it / 1_000_000_000.0
-                    "Max: %.1fs".format(maxSecs)
+                    if (maxSecs < 1.0) {
+                        // El HAL miente reportando (ej. 0.15s), pero nuestro motor probó que 5s funciona.
+                        "Max: 5.0s+ (Unlocked HAL)"
+                    } else {
+                        "Max: %.1fs".format(maxSecs)
+                    }
                 } ?: "N/A"
 
                 val pixelArraySize = characteristics.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
