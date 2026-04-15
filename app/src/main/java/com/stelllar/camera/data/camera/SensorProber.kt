@@ -10,118 +10,205 @@ import android.media.ImageReader
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
-import android.util.Log
-import android.util.Range
+import timber.log.Timber
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.Executor
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.cancel
 
 /**
- * Motor de Sondeo Robusto para descubrir las capacidades reales del hardware,
- * saltándose las limitaciones teóricas reportadas por la API genérica.
+ * Motor de Sondeo Robusto para descubrir las capacidades reales del hardware.
+ * Realiza una prueba iterativa de exposición máxima (5s, 10s, 15s...)
+ * para determinar el límite real del dispositivo.
  */
 class SensorProber(private val context: Context, private val cameraManager: CameraManager) {
 
-    private val probeThread = HandlerThread("ProbeThread").apply { start() }
-    private val probeHandler = Handler(probeThread.looper)
-    private val probeExecutor = Executor { command -> probeHandler.post(command) }
+    private var probeThread: HandlerThread? = null
+    private var probeHandler: Handler? = null
+    private var probeExecutor: Executor? = null
 
-    suspend fun runProbe(cameraId: String) {
-        Log.i(TAG, "==================================================")
-        Log.i(TAG, "🚀 INICIANDO MOTOR DE SONDEO EN CÁMARA: $cameraId")
-        Log.i(TAG, "==================================================")
+    private fun initThread() {
+        probeThread = HandlerThread("ProbeThread").apply { start() }
+        probeHandler = Handler(probeThread!!.looper)
+        probeExecutor = Executor { command -> 
+            probeHandler?.post(command) ?: Timber.w("Executor invoked but probeHandler is null")
+        }
+    }
 
-        val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-        
-        // Fase 1: Sondeo de Parámetros de Sesión
+    /**
+     * Ejecuta la prueba iterativa y devuelve la exposición máxima real soportada en nanosegundos.
+     * Retorna 0L si no se pudo determinar un valor válido.
+     */
+    suspend fun runProbe(cameraId: String, physicalCameraId: String? = null): Long {
+        initThread()
+        Timber.i("==================================================")
+        Timber.i("🚀 INICIANDO TEST DE EXPOSICIÓN EN CÁMARA: ${physicalCameraId ?: cameraId}")
+        Timber.i("==================================================")
+
+        val activeId = physicalCameraId ?: cameraId
+        val characteristics = cameraManager.getCameraCharacteristics(activeId)
         val theoreticalMaxExp = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.upper ?: 0L
-        Log.i(TAG, "[Fase 1] Exposición máxima teórica reportada: ${theoreticalMaxExp / 1_000_000_000.0}s")
+        Timber.i("Exposición máxima teórica ($activeId): ${theoreticalMaxExp / 1e9}s")
 
         var camera: CameraDevice? = null
         var imageReader: ImageReader? = null
         var session: CameraCaptureSession? = null
+        var maxSuccessfulExposureNs = 0L
 
         try {
-            camera = openCamera(cameraId)
-            Log.d(TAG, "[Fase 1] Cámara abierta exitosamente para sondeo oculto.")
+            camera = openCamera(cameraId) // Always open the logical camera
+            Timber.d("Cámara lógica abierta para prueba.")
 
-            // Usar una resolución pequeña para no saturar la memoria durante el sondeo
             val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
             val sizes = map.getOutputSizes(ImageFormat.YUV_420_888)
             val smallSize = sizes.minByOrNull { it.width * it.height } ?: sizes[0]
             imageReader = ImageReader.newInstance(smallSize.width, smallSize.height, ImageFormat.YUV_420_888, 2)
 
-            val outputConfig = OutputConfiguration(imageReader.surface)
+            imageReader.setOnImageAvailableListener({ reader ->
+                val image = reader.acquireLatestImage()
+                image?.close()
+                Timber.d("Imagen de prueba capturada y liberada.")
+            }, probeHandler)
+
+            val outputConfig = OutputConfiguration(imageReader.surface).apply {
+                if (physicalCameraId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    setPhysicalCameraId(physicalCameraId)
+                }
+            }
             
-            // Construir SessionParameters para intentar destrabar el límite (Fase 1)
+            // === CONFIGURACIÓN DE BYPASS PARA HAL v2 ===
             val sessionParamsBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             sessionParamsBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            sessionParamsBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, Range(1, 15)) // FPS Bajo
+            
+            // Usar el rango de FPS más bajo disponible dinámicamente
+            val fpsRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
+            val lowestFpsRange = fpsRanges?.minByOrNull { it.upper }
+            if (lowestFpsRange != null) {
+                sessionParamsBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, lowestFpsRange)
+            }
+            
+            // CRÍTICO: Declarar el Frame Duration Máximo al crear la sesión
+            val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
+            if (maxFrameDuration != null) {
+                sessionParamsBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, maxFrameDuration)
+            }
 
-            val sessionConfig = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                SessionConfiguration(
-                    SessionConfiguration.SESSION_REGULAR,
-                    listOf(outputConfig),
-                    probeExecutor,
-                    object : CameraCaptureSession.StateCallback() {
-                        override fun onConfigured(s: CameraCaptureSession) {}
-                        override fun onConfigureFailed(s: CameraCaptureSession) {}
-                    }
-                ).apply {
-                    sessionParameters = sessionParamsBuilder.build()
+            session = createSession(camera, listOf(outputConfig), sessionParamsBuilder.build())
+            Timber.d("Sesión de prueba creada con parámetros de bypass.")
+
+            // Prueba iterativa (Sin límite de seguridad, forzando el hardware hasta que falle)
+            val startingSeconds = 5L
+            var currentSeconds = startingSeconds
+
+            while (true) {
+                val exposureNs = currentSeconds * 1_000_000_000L
+                val timeoutSeconds = (currentSeconds * 2) + 15 
+
+                Timber.i("--------------------------------------------------")
+                Timber.i("🔥 FORZANDO exposición de $currentSeconds segundos (Timeout: ${timeoutSeconds}s)...")
+                
+                val captureBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+                    addTarget(imageReader.surface)
+                    set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                    set(CaptureRequest.SENSOR_EXPOSURE_TIME, exposureNs)
+                    set(CaptureRequest.SENSOR_FRAME_DURATION, exposureNs) // Emparejar frame duration
+                    // Apagar otras automatizaciones para evitar interferencias
+                    set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                    set(CaptureRequest.CONTROL_AWB_MODE, CaptureRequest.CONTROL_AWB_MODE_OFF)
                 }
-            } else null
 
-            // Verificar si la configuración es soportada antes de crearla (API 29+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && sessionConfig != null) {
-                val isSupported = camera.isSessionConfigurationSupported(sessionConfig)
-                Log.i(TAG, "[Fase 1] ¿Soporta SessionConfiguration con FPS bajos?: $isSupported")
+                val success = tryCaptureWithTimeout(session, captureBuilder.build(), exposureNs, timeoutSeconds)
+
+                if (success) {
+                    maxSuccessfulExposureNs = exposureNs
+                    Timber.i("✅ Hardware SOPORTÓ $currentSeconds segundos reales.")
+                    currentSeconds += 5 // Incrementar y seguir golpeando el HAL
+                } else {
+                    Timber.e("❌ LÍMITE ALCANZADO. El sensor o el HAL colapsó/recortó la toma al pedir $currentSeconds segundos.")
+                    break
+                }
             }
 
-            session = createSession(camera, listOf(outputConfig))
-            Log.d(TAG, "[Fase 1] Sesión de prueba creada.")
-
-            // Fase 2: Sondeo de Captura de Frame Individual ("El Ataque")
-            // Intentaremos forzar 5 segundos (5_000_000_000 nanosegundos)
-            val targetExposureNs = 5_000_000_000L 
-            Log.i(TAG, "[Fase 2] Iniciando Ataque: Solicitando exposición de ${targetExposureNs / 1_000_000_000.0}s")
-
-            val captureBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-                addTarget(imageReader.surface)
-                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                set(CaptureRequest.SENSOR_EXPOSURE_TIME, targetExposureNs)
-                set(CaptureRequest.SENSOR_FRAME_DURATION, targetExposureNs) // Emparejar frame duration
-            }
-
-            val result = captureSingleFrame(session, captureBuilder.build())
-            
-            // Fase 3: Análisis y Registro de Resultados
-            val realExposure = result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L
-            val realFrameDuration = result.get(CaptureResult.SENSOR_FRAME_DURATION) ?: 0L
-            
-            Log.i(TAG, "[Fase 3] RESULTADOS DEL SONDEO:")
-            Log.i(TAG, " -> Solicitado : ${targetExposureNs / 1_000_000_000.0}s")
-            Log.i(TAG, " -> Real Aplicado : ${realExposure / 1_000_000_000.0}s")
-            Log.i(TAG, " -> Frame Duration: ${realFrameDuration / 1_000_000_000.0}s")
-
-            if (realExposure >= targetExposureNs) {
-                Log.i(TAG, "✅ ¡ÉXITO! El hardware permite exposición manual sin límite de OEM.")
-            } else if (realExposure > theoreticalMaxExp) {
-                Log.i(TAG, "⚠️ ÉXITO PARCIAL. Superamos el límite teórico, pero el HAL recortó la toma a ${realExposure / 1_000_000_000.0}s.")
-            } else {
-                Log.e(TAG, "❌ BLOQUEO CONFIRMADO. El hardware/HAL recortó la toma a ${realExposure / 1_000_000_000.0}s.")
-                Log.i(TAG, "💡 Conclusión: Deberemos usar Apilamiento de Imágenes (Stacking) vía NDK en este dispositivo.")
-            }
+            Timber.i("==================================================")
+            Timber.i("🎯 MÁXIMA EXPOSICIÓN REAL: ${maxSuccessfulExposureNs / 1e9} segundos")
+            Timber.i("==================================================")
 
         } catch (e: Exception) {
-            Log.e(TAG, "❌ Error durante el sondeo: ${e.message}")
+            Timber.e("❌ Error crítico durante la prueba: ${e.message}")
         } finally {
+            // CRÍTICO: Garantizar que la sesión de prueba se limpie de forma sincrónica y segura 
+            // antes de devolver el control y reabrir la app principal, para evitar pantalla negra.
+            try {
+                session?.abortCaptures()
+            } catch (e: Exception) {
+                Timber.e("Ignorando error al abortar captures del prober: ${e.message}")
+            }
             session?.close()
             camera?.close()
             imageReader?.close()
-            Log.i(TAG, "==================================================")
+            
+            probeThread?.quitSafely()
+            probeThread = null
+            probeHandler = null
+        }
+        
+        return maxSuccessfulExposureNs
+    }
+
+    private suspend fun tryCaptureWithTimeout(
+        session: CameraCaptureSession, 
+        request: CaptureRequest, 
+        expectedExposureNs: Long,
+        timeoutSeconds: Long
+    ): Boolean = suspendCancellableCoroutine { continuation ->
+        var responded = false
+
+        val timeoutRunnable = Runnable {
+            if (!responded) {
+                responded = true
+                Timber.w("Timeout alcanzado para ${expectedExposureNs / 1e9}s.")
+                if (continuation.isActive) continuation.resume(false)
+            }
+        }
+        
+        // Configurar timeout
+        probeHandler?.postDelayed(timeoutRunnable, timeoutSeconds * 1000L)
+
+        try {
+            session.capture(request, object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(s: CameraCaptureSession, req: CaptureRequest, result: TotalCaptureResult) {
+                    if (responded) return
+                    responded = true
+                    probeHandler?.removeCallbacks(timeoutRunnable)
+
+                    val realExposure = result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L
+                    Timber.d("onCaptureCompleted: Real ${realExposure / 1e9}s (Esperado ${expectedExposureNs / 1e9}s)")
+                    
+                    val isSuccess = realExposure >= (expectedExposureNs * 0.95).toLong()
+                    if (continuation.isActive) continuation.resume(isSuccess)
+                }
+
+                override fun onCaptureFailed(s: CameraCaptureSession, req: CaptureRequest, failure: CaptureFailure) {
+                    if (responded) return
+                    responded = true
+                    probeHandler?.removeCallbacks(timeoutRunnable)
+                    Timber.e("onCaptureFailed: reason ${failure.reason}")
+                    if (continuation.isActive) continuation.resume(false)
+                }
+            }, probeHandler)
+        } catch (e: Exception) {
+            if (!responded) {
+                responded = true
+                probeHandler?.removeCallbacks(timeoutRunnable)
+                Timber.e("Excepción al invocar capture: ${e.message}")
+                if (continuation.isActive) continuation.resume(false)
+            }
+        }
+        
+        continuation.invokeOnCancellation {
+            probeHandler?.removeCallbacks(timeoutRunnable)
         }
     }
 
@@ -138,32 +225,24 @@ class SensorProber(private val context: Context, private val cameraManager: Came
         }, probeHandler)
     }
 
-    private suspend fun createSession(device: CameraDevice, outputs: List<OutputConfiguration>): CameraCaptureSession = suspendCoroutine { cont ->
+    private suspend fun createSession(
+        device: CameraDevice, 
+        outputs: List<OutputConfiguration>, 
+        sessionParams: CaptureRequest? = null
+    ): CameraCaptureSession = suspendCoroutine { cont ->
         val callback = object : CameraCaptureSession.StateCallback() {
             override fun onConfigured(session: CameraCaptureSession) = cont.resume(session)
             override fun onConfigureFailed(session: CameraCaptureSession) = cont.resumeWithException(RuntimeException("Session failed"))
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val config = SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputs, probeExecutor, callback)
+            val config = SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputs, probeExecutor!!, callback)
+            if (sessionParams != null) {
+                config.sessionParameters = sessionParams
+            }
             device.createCaptureSession(config)
         } else {
             @Suppress("DEPRECATION")
             device.createCaptureSessionByOutputConfigurations(outputs, callback, probeHandler)
         }
-    }
-
-    private suspend fun captureSingleFrame(session: CameraCaptureSession, request: CaptureRequest): TotalCaptureResult = suspendCancellableCoroutine { cont ->
-        session.capture(request, object : CameraCaptureSession.CaptureCallback() {
-            override fun onCaptureCompleted(s: CameraCaptureSession, req: CaptureRequest, result: TotalCaptureResult) {
-                if (cont.isActive) cont.resume(result)
-            }
-            override fun onCaptureFailed(s: CameraCaptureSession, req: CaptureRequest, failure: CaptureFailure) {
-                if (cont.isActive) cont.resumeWithException(RuntimeException("Capture failed: reason ${failure.reason}"))
-            }
-        }, probeHandler)
-    }
-
-    companion object {
-        private const val TAG = "SensorProber"
     }
 }

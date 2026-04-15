@@ -22,13 +22,13 @@ class CameraViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<CameraState>(CameraState.Idle)
     val uiState: StateFlow<CameraState> = _uiState.asStateFlow()
 
-    fun initializeCamera(cameraId: String, pixelFormat: Int, surface: Surface, rotation: Int) {
+    fun initializeCamera(cameraId: String, physicalCameraId: String?, pixelFormat: Int, surface: Surface, rotation: Int) {
         viewModelScope.launch {
             _uiState.value = CameraState.Initializing
             try {
-                cameraRepository.initializeCamera(cameraId, pixelFormat, surface)
+                cameraRepository.initializeCamera(cameraId, physicalCameraId, pixelFormat, surface)
                 cameraRepository.updateDeviceRotation(rotation)
-                _uiState.value = CameraState.Ready
+                _uiState.value = CameraState.Ready()
             } catch (e: Exception) {
                 _uiState.value = CameraState.Error("Error al inicializar la cámara: ${e.message}", e)
             }
@@ -40,14 +40,15 @@ class CameraViewModel @Inject constructor(
     }
 
     fun takePhoto(onPhotoSaved: (PhotoResult) -> Unit, onCaptureStarted: () -> Unit = {}) {
-        if (_uiState.value !is CameraState.Ready) return
+        val currentState = _uiState.value
+        if (currentState !is CameraState.Ready) return
         
         viewModelScope.launch {
             _uiState.value = CameraState.Capturing
             try {
-                val result = cameraRepository.takePhoto(onCaptureStarted)
+                val result = cameraRepository.takePhoto(onCaptureStarted, currentState.parameters)
                 onPhotoSaved(result)
-                _uiState.value = CameraState.Ready
+                _uiState.value = CameraState.Ready()
             } catch (e: Exception) {
                 _uiState.value = CameraState.Error("Error al capturar la foto: ${e.message}", e)
             }

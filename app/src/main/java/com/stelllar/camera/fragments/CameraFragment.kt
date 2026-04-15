@@ -100,6 +100,7 @@ class CameraFragment : Fragment() {
                 view.post {
                     viewModel.initializeCamera(
                         args.cameraId,
+                        args.physicalCameraId,
                         args.pixelFormat,
                         fragmentCameraBinding.viewFinder.holder.surface,
                         relativeOrientation.value ?: 0
@@ -138,22 +139,75 @@ class CameraFragment : Fragment() {
         }
 
         // --- MODO EXPERIMENTAL (Rama: experimento-sensores) ---
-        // Ejecutar el motor de sondeo al mantener presionado el botón de captura
-        fragmentCameraBinding.captureButton.setOnLongClickListener {
-            android.widget.Toast.makeText(
-                requireContext(), 
-                "🚀 Iniciando Motor de Sondeo...\nRevisa el Logcat de Android Studio", 
-                android.widget.Toast.LENGTH_LONG
-            ).show()
+        val prefs = requireContext().getSharedPreferences("camera_test", Context.MODE_PRIVATE)
+        val savedMax = prefs.getLong("max_exposure_ns_${args.cameraId}", 0L)
+        
+        if (savedMax > 0) {
+            fragmentCameraBinding.tvMaxExposure.text = "Máxima real: ${savedMax / 1e9}s"
+        } else {
+            // Mostrar valor teórico oficial si no hay test previo
+            val theoreticalMaxExp = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.upper ?: 0L
+            val formattedExp = String.format("%.2f", theoreticalMaxExp / 1e9)
+            fragmentCameraBinding.tvMaxExposure.text = "Máx. Oficial: ${formattedExp}s (No testeada)"
+        }
+
+        fragmentCameraBinding.btnTestExposure.setOnClickListener {
+            fragmentCameraBinding.btnTestExposure.isEnabled = false
+            fragmentCameraBinding.captureButton.isEnabled = false
+            fragmentCameraBinding.tvMaxExposure.text = "Probando exposición... (no salir)"
             
+            // Cerrar la cámara actual para liberar el sensor para la prueba
+            viewModel.closeCamera()
+
             lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 try {
-                    com.stelllar.camera.data.camera.SensorProber(requireContext(), cameraManager).runProbe(args.cameraId)
+                    // RESET DEL HAL: Delay masivo para permitir al CameraService resetearse tras el error reason 0
+                    kotlinx.coroutines.delay(2000) 
+                    
+                    val maxNs = com.stelllar.camera.data.camera.SensorProber(requireContext(), cameraManager).runProbe(args.cameraId, args.physicalCameraId)
+                    
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        if (maxNs > 0) {
+                            prefs.edit().putLong("max_exposure_ns_${args.cameraId}", maxNs).apply()
+                            fragmentCameraBinding.tvMaxExposure.text = "Máxima real: ${maxNs / 1e9}s"
+                            android.widget.Toast.makeText(requireContext(), "Test Exitoso: ${maxNs / 1e9}s", android.widget.Toast.LENGTH_LONG).show()
+                        } else {
+                            fragmentCameraBinding.tvMaxExposure.text = "Fallo al detectar máximo"
+                            android.widget.Toast.makeText(requireContext(), "La cámara no soporta exposición prolongada", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                        fragmentCameraBinding.btnTestExposure.isEnabled = true
+                        fragmentCameraBinding.captureButton.isEnabled = true
+                        
+                        // RESET DEL HAL POST-PROBA: Delay antes de reabrir
+                        kotlinx.coroutines.delay(1000)
+
+                        // Reiniciar la cámara normal
+                        viewModel.initializeCamera(
+                            args.cameraId,
+                            args.physicalCameraId,
+                            args.pixelFormat,
+                            fragmentCameraBinding.viewFinder.holder.surface,
+                            relativeOrientation.value ?: 0
+                        )
+                    }
                 } catch (e: Exception) {
                     Log.e(TAG, "Sondeo fallido", e)
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        fragmentCameraBinding.tvMaxExposure.text = "Error en prueba"
+                        fragmentCameraBinding.btnTestExposure.isEnabled = true
+                        fragmentCameraBinding.captureButton.isEnabled = true
+                        
+                        kotlinx.coroutines.delay(1000)
+                        viewModel.initializeCamera(
+                            args.cameraId,
+                            args.physicalCameraId,
+                            args.pixelFormat,
+                            fragmentCameraBinding.viewFinder.holder.surface,
+                            relativeOrientation.value ?: 0
+                        )
+                    }
                 }
             }
-            true // Indica que consumimos el evento long-click
         }
     }
 

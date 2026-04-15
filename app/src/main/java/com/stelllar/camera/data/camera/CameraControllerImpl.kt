@@ -7,7 +7,6 @@ import android.graphics.ImageFormat
 import android.hardware.camera2.*
 import android.media.Image
 import android.media.ImageReader
-import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -16,27 +15,24 @@ import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
-import androidx.exifinterface.media.ExifInterface
+import com.stelllar.camera.domain.CameraParameters
 import com.stelllar.camera.domain.repository.CameraRepository
 import com.stelllar.camera.domain.repository.PhotoResult
 import com.stelllar.camera.utils.computeExifOrientation
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import java.io.Closeable
-import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeoutException
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
+import timber.log.Timber
 
 @Singleton
 class CameraControllerImpl @Inject constructor(
@@ -52,16 +48,37 @@ class CameraControllerImpl @Inject constructor(
     private lateinit var session: CameraCaptureSession
     private lateinit var imageReader: ImageReader
 
-    private val cameraThread = HandlerThread("CameraThread").apply { start() }
-    private val cameraHandler = Handler(cameraThread.looper)
+    private var cameraThread: HandlerThread? = null
+    private var cameraHandler: Handler? = null
 
-    private val imageReaderThread = HandlerThread("imageReaderThread").apply { start() }
-    private val imageReaderHandler = Handler(imageReaderThread.looper)
+    private var imageReaderThread: HandlerThread? = null
+    private var imageReaderHandler: Handler? = null
+    
+    private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private var currentRotation: Int = 0
+    private var activePhysicalCameraId: String? = null
 
-    override suspend fun initializeCamera(cameraId: String, pixelFormat: Int, previewSurface: Surface) {
-        characteristics = cameraManager.getCameraCharacteristics(cameraId)
+    private fun initThreads() {
+        if (cameraThread == null) {
+            cameraThread = HandlerThread("CameraThread").apply { start() }
+            cameraHandler = Handler(cameraThread!!.looper)
+        }
+        if (imageReaderThread == null) {
+            imageReaderThread = HandlerThread("imageReaderThread").apply { start() }
+            imageReaderHandler = Handler(imageReaderThread!!.looper)
+        }
+    }
+
+    override suspend fun initializeCamera(cameraId: String, physicalCameraId: String?, pixelFormat: Int, previewSurface: Surface) {
+        initThreads()
+        this.activePhysicalCameraId = physicalCameraId
+        characteristics = if (physicalCameraId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            cameraManager.getCameraCharacteristics(physicalCameraId)
+        } else {
+            cameraManager.getCameraCharacteristics(cameraId)
+        }
+        
         camera = openCamera(cameraManager, cameraId, cameraHandler)
 
         val size = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
@@ -70,7 +87,7 @@ class CameraControllerImpl @Inject constructor(
         imageReader = ImageReader.newInstance(size.width, size.height, pixelFormat, IMAGE_BUFFER_SIZE)
 
         val targets = listOf(previewSurface, imageReader.surface)
-        session = createCaptureSession(camera, targets, cameraHandler)
+        session = createCaptureSession(camera, targets, physicalCameraId, cameraHandler)
 
         val captureRequest = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
             addTarget(previewSurface)
@@ -82,12 +99,15 @@ class CameraControllerImpl @Inject constructor(
         currentRotation = rotation
     }
 
-    override suspend fun takePhoto(onCaptureStarted: () -> Unit): PhotoResult = withContext(Dispatchers.IO) {
-        val result = captureImage(onCaptureStarted)
+    override suspend fun takePhoto(
+        onCaptureStarted: () -> Unit,
+        parameters: CameraParameters
+    ): PhotoResult = withContext(Dispatchers.IO) {
+        val result = captureImage(onCaptureStarted, parameters)
         
-        Log.d(TAG, "Result received: $result")
+        Timber.d("Result received: $result")
         val photoResult = saveResult(result)
-        Log.d(TAG, "Image saved to MediaStore: ${photoResult.uriString}")
+        Timber.d("Image saved to MediaStore: ${photoResult.uriString}")
 
         result.close()
         photoResult
@@ -95,11 +115,22 @@ class CameraControllerImpl @Inject constructor(
 
     override fun closeCamera() {
         try {
-            if (::session.isInitialized) session.close()
+            if (::session.isInitialized) {
+                try { session.abortCaptures() } catch(e: Exception) {}
+                session.close()
+            }
             if (::camera.isInitialized) camera.close()
             if (::imageReader.isInitialized) imageReader.close()
+            
+            cameraThread?.quitSafely()
+            cameraThread = null
+            cameraHandler = null
+            
+            imageReaderThread?.quitSafely()
+            imageReaderThread = null
+            imageReaderHandler = null
         } catch (exc: Throwable) {
-            Log.e(TAG, "Error closing camera", exc)
+            Timber.e(exc, "Error closing camera")
         }
     }
 
@@ -113,8 +144,7 @@ class CameraControllerImpl @Inject constructor(
             override fun onOpened(device: CameraDevice) = cont.resume(device)
 
             override fun onDisconnected(device: CameraDevice) {
-                Log.w(TAG, "Camera $cameraId has been disconnected")
-                // Cannot finish activity from here, need a callback or Flow state
+                Timber.w("Camera $cameraId has been disconnected")
             }
 
             override fun onError(device: CameraDevice, error: Int) {
@@ -127,7 +157,7 @@ class CameraControllerImpl @Inject constructor(
                     else -> "Unknown"
                 }
                 val exc = RuntimeException("Camera $cameraId error: ($error) $msg")
-                Log.e(TAG, exc.message, exc)
+                Timber.e(exc)
                 if (cont.isActive) cont.resumeWithException(exc)
             }
         }, handler)
@@ -136,6 +166,7 @@ class CameraControllerImpl @Inject constructor(
     private suspend fun createCaptureSession(
         device: CameraDevice,
         targets: List<Surface>,
+        physicalCameraId: String?,
         handler: Handler? = null
     ): CameraCaptureSession = suspendCoroutine { cont ->
         val stateCallback = object : CameraCaptureSession.StateCallback() {
@@ -147,14 +178,10 @@ class CameraControllerImpl @Inject constructor(
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            // Find the lowest FPS range (e.g., [1, 15] or [7, 30])
             val fpsRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
             val lowestFpsRange = fpsRanges?.minByOrNull { it.upper }
-
-            // Find the maximum frame duration for long exposure
             val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
 
-            // Setup initial session parameters to unlock HAL restrictions
             val sessionParams = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
                 if (lowestFpsRange != null) {
@@ -165,7 +192,13 @@ class CameraControllerImpl @Inject constructor(
                 }
             }.build()
 
-            val outputConfigs = targets.map { android.hardware.camera2.params.OutputConfiguration(it) }
+            val outputConfigs = targets.map { 
+                android.hardware.camera2.params.OutputConfiguration(it).apply {
+                    if (physicalCameraId != null) {
+                        setPhysicalCameraId(physicalCameraId)
+                    }
+                }
+            }
             val sessionConfig = android.hardware.camera2.params.SessionConfiguration(
                 android.hardware.camera2.params.SessionConfiguration.SESSION_REGULAR,
                 outputConfigs,
@@ -177,7 +210,7 @@ class CameraControllerImpl @Inject constructor(
             try {
                 device.createCaptureSession(sessionConfig)
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to create session with HAL v2 params, falling back to legacy", e)
+                Timber.e(e, "Failed to create session with HAL v2 params, falling back to legacy")
                 device.createCaptureSession(targets, stateCallback, handler)
             }
         } else {
@@ -185,28 +218,42 @@ class CameraControllerImpl @Inject constructor(
         }
     }
 
-    private suspend fun captureImage(onCaptureStarted: () -> Unit): CombinedCaptureResult = suspendCancellableCoroutine { cont ->
+    private suspend fun captureImage(
+        onCaptureStarted: () -> Unit,
+        parameters: CameraParameters
+    ): CombinedCaptureResult = suspendCancellableCoroutine { cont ->
         @Suppress("ControlFlowWithEmptyBody")
         while (imageReader.acquireNextImage() != null) {}
 
-        val imageQueue = ArrayBlockingQueue<Image>(IMAGE_BUFFER_SIZE)
+        val imageChannel = Channel<Image>(Channel.UNLIMITED)
         imageReader.setOnImageAvailableListener({ reader ->
             val image = reader.acquireNextImage()
-            imageQueue.add(image)
+            if (image != null) {
+                imageChannel.trySend(image)
+            }
         }, imageReaderHandler)
 
-        val captureRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+        var captureRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
             addTarget(imageReader.surface)
-            
-            // Forzar larga exposición desactivando Auto-Exposure y empujando el Frame Duration
             set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-            val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
-            if (maxFrameDuration != null) {
-                set(CaptureRequest.SENSOR_FRAME_DURATION, maxFrameDuration)
+            
+            // Bypass logic for 30s exposure
+            val requestedExposure = parameters.exposureTimeNs ?: 30_000_000_000L // 30s by default if manual
+            val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION) ?: 100000000L
+            val maxExposure = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.upper ?: maxFrameDuration
+            
+            // We force the requested exposure even if it exceeds maxExposure (Bypass). 
+            set(CaptureRequest.SENSOR_EXPOSURE_TIME, requestedExposure)
+            set(CaptureRequest.SENSOR_FRAME_DURATION, maxOf(requestedExposure, maxFrameDuration))
+            
+            parameters.iso?.let { set(CaptureRequest.SENSOR_SENSITIVITY, it) }
+            parameters.focusDistance?.let { 
+                set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
+                set(CaptureRequest.LENS_FOCUS_DISTANCE, it)
             }
         }
         
-        session.capture(captureRequest.build(), object : CameraCaptureSession.CaptureCallback() {
+        val captureCallback = object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureStarted(
                 session: CameraCaptureSession,
                 request: CaptureRequest,
@@ -224,24 +271,31 @@ class CameraControllerImpl @Inject constructor(
             ) {
                 super.onCaptureCompleted(session, request, result)
                 val resultTimestamp = result.get(CaptureResult.SENSOR_TIMESTAMP)
+                val appliedExposure = result.get(CaptureResult.SENSOR_EXPOSURE_TIME)
+                Timber.d("Exposición aplicada por hardware: $appliedExposure ns")
 
                 val exc = TimeoutException("Image dequeuing took too long")
                 val timeoutRunnable = Runnable { cont.resumeWithException(exc) }
-                imageReaderHandler.postDelayed(timeoutRunnable, IMAGE_CAPTURE_TIMEOUT_MILLIS)
+                imageReaderHandler?.postDelayed(timeoutRunnable, IMAGE_CAPTURE_TIMEOUT_MILLIS)
 
-                Thread {
+                controllerScope.launch {
                     try {
                         while (true) {
-                            val image = imageQueue.take()
+                            val image = imageChannel.receive()
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
                                 image.format != ImageFormat.DEPTH_JPEG &&
-                                image.timestamp != resultTimestamp) continue
+                                image.timestamp != resultTimestamp) {
+                                image.close()
+                                continue
+                            }
 
-                            imageReaderHandler.removeCallbacks(timeoutRunnable)
+                            imageReaderHandler?.removeCallbacks(timeoutRunnable)
                             imageReader.setOnImageAvailableListener(null, null)
 
-                            while (imageQueue.size > 0) {
-                                imageQueue.take().close()
+                            // Clean up remaining images
+                            imageChannel.close()
+                            for (remainingImage in imageChannel) {
+                                remainingImage.close()
                             }
 
                             val mirrored = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
@@ -253,9 +307,41 @@ class CameraControllerImpl @Inject constructor(
                     } catch (e: Exception) {
                         if (cont.isActive) cont.resumeWithException(e)
                     }
-                }.start()
+                }
             }
-        }, cameraHandler)
+            
+            override fun onCaptureFailed(
+                session: CameraCaptureSession,
+                request: CaptureRequest,
+                failure: CaptureFailure
+            ) {
+                Timber.e("Capture failed. Reason: ${failure.reason}")
+                if (cont.isActive) cont.resumeWithException(RuntimeException("Capture failed: ${failure.reason}"))
+            }
+        }
+        
+        try {
+            session.capture(captureRequest.build(), captureCallback, cameraHandler)
+        } catch (e: IllegalArgumentException) {
+            Timber.w(e, "Hardware rechazó la exposición extrema. Aplicando Fallback.")
+            // Fallback: Usar el máximo reportado por la API
+            val fallbackRequest = session.device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+                addTarget(imageReader.surface)
+                set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
+                val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION) ?: 100000000L
+                val maxExposure = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.upper ?: maxFrameDuration
+                set(CaptureRequest.SENSOR_EXPOSURE_TIME, maxExposure)
+                set(CaptureRequest.SENSOR_FRAME_DURATION, maxFrameDuration)
+                parameters.iso?.let { set(CaptureRequest.SENSOR_SENSITIVITY, it) }
+            }
+            try {
+                session.capture(fallbackRequest.build(), captureCallback, cameraHandler)
+            } catch (fallbackEx: Exception) {
+                if (cont.isActive) cont.resumeWithException(fallbackEx)
+            }
+        } catch (e: Exception) {
+            if (cont.isActive) cont.resumeWithException(e)
+        }
     }
 
     private suspend fun saveResult(result: CombinedCaptureResult): PhotoResult = suspendCoroutine { cont ->
@@ -309,7 +395,6 @@ class CameraControllerImpl @Inject constructor(
     }
 
     companion object {
-        private val TAG = CameraControllerImpl::class.java.simpleName
         private const val IMAGE_BUFFER_SIZE: Int = 3
         private const val IMAGE_CAPTURE_TIMEOUT_MILLIS: Long = 5000
 
