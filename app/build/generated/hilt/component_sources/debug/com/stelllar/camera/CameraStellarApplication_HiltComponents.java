@@ -6,6 +6,7 @@ import com.stelllar.camera.fragments.ImageViewerFragment_GeneratedInjector;
 import com.stelllar.camera.fragments.PermissionsFragment_GeneratedInjector;
 import com.stelllar.camera.fragments.SelectorFragment_GeneratedInjector;
 import com.stelllar.camera.presentation.CameraViewModel_HiltModules;
+import com.stelllar.camera.presentation.SelectorViewModel_HiltModules;
 import dagger.Binds;
 import dagger.Component;
 import dagger.Module;
@@ -161,7 +162,8 @@ public final class CameraStellarApplication_HiltComponents {
           ViewModelCBuilderModule.class,
           CameraViewModel_HiltModules.KeyModule.class,
           HiltWrapper_ActivityRetainedComponentManager_LifecycleModule.class,
-          HiltWrapper_SavedStateHandleModule.class
+          HiltWrapper_SavedStateHandleModule.class,
+          SelectorViewModel_HiltModules.KeyModule.class
       }
   )
   @ActivityRetainedScoped
@@ -198,7 +200,8 @@ public final class CameraStellarApplication_HiltComponents {
   @Subcomponent(
       modules = {
           CameraViewModel_HiltModules.BindsModule.class,
-          HiltWrapper_HiltViewModelFactory_ViewModelModule.class
+          HiltWrapper_HiltViewModelFactory_ViewModelModule.class,
+          SelectorViewModel_HiltModules.BindsModule.class
       }
   )
   @ViewModelScoped

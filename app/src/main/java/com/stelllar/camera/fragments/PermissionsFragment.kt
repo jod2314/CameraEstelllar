@@ -16,63 +16,63 @@
 
 package com.stelllar.camera.fragments
 
-import dagger.hilt.android.AndroidEntryPoint
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.navigation.Navigation
 import androidx.lifecycle.lifecycleScope
 import com.stelllar.camera.R
-
-private const val PERMISSIONS_REQUEST_CODE = 10
-private val PERMISSIONS_REQUIRED = arrayOf(Manifest.permission.CAMERA)
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 
 /**
- * This [Fragment] requests permissions and, once granted, it will navigate to the next fragment
+ * Fragmento encargado de solicitar permisos de forma moderna.
  */
 @AndroidEntryPoint
 class PermissionsFragment : Fragment() {
+
+    private val requestPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+            val allGranted = permissions.entries.all { it.value }
+            if (allGranted) {
+                navigateToSelector()
+            } else {
+                Toast.makeText(context, "Permisos denegados. La app no puede funcionar.", Toast.LENGTH_LONG).show()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         if (hasPermissions(requireContext())) {
-            // If permissions have already been granted, proceed
-            nativateToCamera();
+            navigateToSelector()
         } else {
-            // Request camera-related permissions
-            requestPermissions(PERMISSIONS_REQUIRED, PERMISSIONS_REQUEST_CODE)
+            requestPermissionLauncher.launch(PERMISSIONS_REQUIRED)
         }
     }
 
-    override fun onRequestPermissionsResult(
-            requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSIONS_REQUEST_CODE) {
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Takes the user to the success fragment when permission is granted
-                nativateToCamera();
-            } else {
-                Toast.makeText(context, "Permission request denied", Toast.LENGTH_LONG).show()
-            }
-        }
-    }
-
-    private fun nativateToCamera()
-    {
-        lifecycleScope.launchWhenStarted {
+    private fun navigateToSelector() {
+        lifecycleScope.launch {
             Navigation.findNavController(requireActivity(), R.id.fragment_container).navigate(
-                    PermissionsFragmentDirections.actionPermissionsToSelector())
+                PermissionsFragmentDirections.actionPermissionsToSelector()
+            )
         }
     }
 
     companion object {
+        private val PERMISSIONS_REQUIRED = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        }
 
-        /** Convenience method used to check if all permissions required by this app are granted */
+        /** Verifica si todos los permisos requeridos están concedidos */
         fun hasPermissions(context: Context) = PERMISSIONS_REQUIRED.all {
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }

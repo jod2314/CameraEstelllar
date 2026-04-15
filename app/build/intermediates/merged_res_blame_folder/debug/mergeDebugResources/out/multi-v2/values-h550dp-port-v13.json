@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.stelllar.camera.app-mergeDebugResources-47:/values-h550dp-port-v13/values-h550dp-port-v13.xml",
+            "outputFile": "com.stelllar.camera.app-mergeDebugResources-65:/values-h550dp-port-v13/values-h550dp-port-v13.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\b5c8c734b4d20fff8c60798fba668e82\\transformed\\material-1.12.0\\res\\values-h550dp-port-v13\\values-h550dp-port-v13.xml",
+                    "source": "C:\\Users\\jodac\\.gradle\\caches\\8.13\\transforms\\d10951c82caf256496524171bfda7cbb\\transformed\\material-1.12.0\\res\\values-h550dp-port-v13\\values-h550dp-port-v13.xml",
                     "from": {
                         "startLines": "2",
                         "startColumns": "4",

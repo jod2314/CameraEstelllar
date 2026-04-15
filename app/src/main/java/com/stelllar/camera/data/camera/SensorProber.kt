@@ -18,12 +18,20 @@ import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import kotlinx.coroutines.cancel
 
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import javax.inject.Singleton
+
 /**
  * Motor de Sondeo Robusto para descubrir las capacidades reales del hardware.
  * Realiza una prueba iterativa de exposición máxima (5s, 10s, 15s...)
  * para determinar el límite real del dispositivo.
  */
-class SensorProber(private val context: Context, private val cameraManager: CameraManager) {
+@Singleton
+class SensorProber @Inject constructor(
+    @ApplicationContext private val context: Context, 
+    private val cameraManager: CameraManager
+) {
 
     private var probeThread: HandlerThread? = null
     private var probeHandler: Handler? = null

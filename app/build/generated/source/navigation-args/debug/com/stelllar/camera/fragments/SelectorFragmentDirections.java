@@ -2,6 +2,7 @@ package com.stelllar.camera.fragments;
 
 import android.os.Bundle;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.navigation.NavDirections;
 import com.stelllar.camera.R;
 import java.lang.IllegalArgumentException;
@@ -50,6 +51,13 @@ public class SelectorFragmentDirections {
       return this;
     }
 
+    @NonNull
+    @SuppressWarnings("unchecked")
+    public ActionSelectorToCamera setPhysicalCameraId(@Nullable String physicalCameraId) {
+      this.arguments.put("physical_camera_id", physicalCameraId);
+      return this;
+    }
+
     @Override
     @SuppressWarnings("unchecked")
     @NonNull
@@ -62,6 +70,12 @@ public class SelectorFragmentDirections {
       if (arguments.containsKey("pixel_format")) {
         int pixelFormat = (int) arguments.get("pixel_format");
         __result.putInt("pixel_format", pixelFormat);
+      }
+      if (arguments.containsKey("physical_camera_id")) {
+        String physicalCameraId = (String) arguments.get("physical_camera_id");
+        __result.putString("physical_camera_id", physicalCameraId);
+      } else {
+        __result.putString("physical_camera_id", null);
       }
       return __result;
     }
@@ -80,6 +94,12 @@ public class SelectorFragmentDirections {
     @SuppressWarnings("unchecked")
     public int getPixelFormat() {
       return (int) arguments.get("pixel_format");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Nullable
+    public String getPhysicalCameraId() {
+      return (String) arguments.get("physical_camera_id");
     }
 
     @Override
@@ -103,6 +123,12 @@ public class SelectorFragmentDirections {
       if (getPixelFormat() != that.getPixelFormat()) {
         return false;
       }
+      if (arguments.containsKey("physical_camera_id") != that.arguments.containsKey("physical_camera_id")) {
+        return false;
+      }
+      if (getPhysicalCameraId() != null ? !getPhysicalCameraId().equals(that.getPhysicalCameraId()) : that.getPhysicalCameraId() != null) {
+        return false;
+      }
       if (getActionId() != that.getActionId()) {
         return false;
       }
@@ -114,6 +140,7 @@ public class SelectorFragmentDirections {
       int result = 1;
       result = 31 * result + (getCameraId() != null ? getCameraId().hashCode() : 0);
       result = 31 * result + getPixelFormat();
+      result = 31 * result + (getPhysicalCameraId() != null ? getPhysicalCameraId().hashCode() : 0);
       result = 31 * result + getActionId();
       return result;
     }
@@ -123,6 +150,7 @@ public class SelectorFragmentDirections {
       return "ActionSelectorToCamera(actionId=" + getActionId() + "){"
           + "cameraId=" + getCameraId()
           + ", pixelFormat=" + getPixelFormat()
+          + ", physicalCameraId=" + getPhysicalCameraId()
           + "}";
     }
   }

@@ -6,6 +6,7 @@ id action_camera_to_jpeg_viewer
 id action_camera_to_permissions
 id action_permissions_to_selector
 id action_selector_to_camera
+id btn_test_exposure
 id camera_fragment
 id capture_button
 id fragment_container
@@ -14,6 +15,7 @@ id nav_graph
 id overlay
 id permissions_fragment
 id selector_fragment
+id tv_max_exposure
 id view_finder
 layout activity_camera
 layout fragment_camera

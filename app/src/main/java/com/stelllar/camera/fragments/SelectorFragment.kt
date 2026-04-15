@@ -16,160 +16,56 @@
 
 package com.stelllar.camera.fragments
 
-import dagger.hilt.android.AndroidEntryPoint
-import android.annotation.SuppressLint
-import android.content.Context
-import android.graphics.ImageFormat
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CameraMetadata
 import android.os.Bundle
-import android.util.Range
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.TextView
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
-import androidx.navigation.Navigation
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import com.stelllar.camera.utils.GenericListAdapter
-import com.stelllar.camera.R
+import androidx.fragment.app.viewModels
+import androidx.navigation.fragment.findNavController
+import com.stelllar.camera.presentation.SelectorViewModel
+import com.stelllar.camera.presentation.compose.CameraSelectorScreen
+import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class SelectorFragment : Fragment() {
 
+    private val viewModel: SelectorViewModel by viewModels()
+
     override fun onCreateView(
-            inflater: LayoutInflater,
-            container: ViewGroup?,
-            savedInstanceState: Bundle?
-    ): View? = RecyclerView(requireContext())
-
-    @SuppressLint("MissingPermission")
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        view as RecyclerView
-        view.apply {
-            layoutManager = LinearLayoutManager(requireContext())
-
-            val cameraManager =
-                    requireContext().getSystemService(Context.CAMERA_SERVICE) as CameraManager
-
-            val cameraList = enumerateCameras(cameraManager)
-
-            val layoutId = android.R.layout.simple_list_item_2
-            adapter = GenericListAdapter(cameraList, itemLayoutId = layoutId) { view, item, _ ->
-                view.findViewById<TextView>(android.R.id.text1).text = item.title
-                val subtitleView = view.findViewById<TextView>(android.R.id.text2)
-                subtitleView.text = item.subtitle
-                subtitleView.maxLines = 4
-                subtitleView.setLineSpacing(0f, 1.2f)
-
-                view.setOnClickListener {
-                    Navigation.findNavController(requireActivity(), R.id.fragment_container)
-                            .navigate(SelectorFragmentDirections.actionSelectorToCamera(
-                                    item.cameraId, item.format))
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        return ComposeView(requireContext()).apply {
+            // Dispose the Composition when the view's LifecycleOwner is destroyed
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                MaterialTheme {
+                    CameraSelectorScreen(
+                        viewModel = viewModel,
+                        onCameraSelected = { item ->
+                            findNavController().navigate(
+                                SelectorFragmentDirections.actionSelectorToCamera(
+                                    item.logicalId, 
+                                    item.format
+                                ).setPhysicalCameraId(item.physicalId)
+                            )
+                        }
+                    )
                 }
             }
-        }
-
-    }
-
-    companion object {
-
-        /** Helper class used as a data holder for each selectable camera format item */
-        private data class FormatItem(val title: String, val subtitle: String, val cameraId: String, val format: Int)
-
-        /** Helper function used to convert a lens orientation enum into a human-readable string */
-        private fun lensOrientationString(value: Int) = when(value) {
-            CameraCharacteristics.LENS_FACING_BACK -> "Back"
-            CameraCharacteristics.LENS_FACING_FRONT -> "Front"
-            CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"
-            else -> "Unknown"
-        }
-
-        /** Helper function used to list all compatible cameras and supported pixel formats */
-        @SuppressLint("InlinedApi")
-        private fun enumerateCameras(cameraManager: CameraManager): List<FormatItem> {
-            val availableCameras: MutableList<FormatItem> = mutableListOf()
-
-            // Get list of all compatible cameras
-            val cameraIds = cameraManager.cameraIdList.filter {
-                val characteristics = cameraManager.getCameraCharacteristics(it)
-                val capabilities = characteristics.get(
-                        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
-                capabilities?.contains(
-                        CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_BACKWARD_COMPATIBLE) ?: false
-            }
-
-            // Iterate over the list of cameras and return all the compatible ones
-            cameraIds.forEach { id ->
-                val characteristics = cameraManager.getCameraCharacteristics(id)
-                val orientation = lensOrientationString(
-                        characteristics.get(CameraCharacteristics.LENS_FACING)!!)
-
-                // Query the available capabilities and output formats
-                val capabilities = characteristics.get(
-                        CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)!!
-                val outputFormats = characteristics.get(
-                        CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!.outputFormats
-
-                // Extract hardware info
-                val hwLevelInt = characteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL)
-                val hwLevelStr = when (hwLevelInt) {
-                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY -> "Legacy"
-                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED -> "Limited"
-                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_FULL -> "Full"
-                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_3 -> "Level 3"
-                    CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_EXTERNAL -> "External"
-                    else -> "Unknown"
-                }
-
-                val isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
-                val isoStr = isoRange?.let { "${it.lower} - ${it.upper}" } ?: "N/A"
-
-                // Usamos MAX_FRAME_DURATION como la verdadera Exposición Máxima desbloqueada empíricamente
-                val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
-                val expStr = maxFrameDuration?.let { 
-                    val maxSecs = it / 1_000_000_000.0
-                    if (maxSecs < 1.0) {
-                        // El HAL miente reportando (ej. 0.15s), pero nuestro motor probó que 5s funciona.
-                        "Max: 5.0s+ (Unlocked HAL)"
-                    } else {
-                        "Max: %.1fs".format(maxSecs)
-                    }
-                } ?: "N/A"
-
-                val pixelArraySize = characteristics.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
-                val mpStr = pixelArraySize?.let {
-                    val mp = (it.width * it.height) / 1_000_000.0
-                    "%.1f MP".format(mp)
-                } ?: "N/A"
-
-                val subtitle = "HW Level: $hwLevelStr | $mpStr\nISO: $isoStr | Exp: $expStr"
-
-                // All cameras *must* support JPEG output so we don't need to check characteristics
-                availableCameras.add(FormatItem(
-                        "$orientation JPEG ($id)", subtitle, id, ImageFormat.JPEG))
-
-                // Return cameras that support RAW capability
-                if (capabilities.contains(
-                                CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW) &&
-                        outputFormats.contains(ImageFormat.RAW_SENSOR)) {
-                    availableCameras.add(FormatItem(
-                            "$orientation RAW ($id)", subtitle, id, ImageFormat.RAW_SENSOR))
-                }
-
-                // Return cameras that support JPEG DEPTH capability
-                if (capabilities.contains(
-                            CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_DEPTH_OUTPUT) &&
-                        outputFormats.contains(ImageFormat.DEPTH_JPEG)) {
-                    availableCameras.add(FormatItem(
-                            "$orientation DEPTH ($id)", subtitle, id, ImageFormat.DEPTH_JPEG))
-                }
-            }
-
-            return availableCameras
         }
     }
+}
+
+// Helper para el tema rápido (podría moverse a un archivo aparte)
+@androidx.compose.runtime.Composable
+fun MaterialTheme(content: @androidx.compose.runtime.Composable () -> Unit) {
+    androidx.compose.material3.MaterialTheme(
+        colorScheme = androidx.compose.material3.darkColorScheme(),
+        content = content
+    )
 }

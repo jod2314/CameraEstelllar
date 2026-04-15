@@ -2,6 +2,7 @@ package com.stelllar.camera.fragments;
 
 import android.os.Bundle;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.lifecycle.SavedStateHandle;
 import androidx.navigation.NavArgs;
 import java.lang.IllegalArgumentException;
@@ -44,6 +45,13 @@ public class CameraFragmentArgs implements NavArgs {
     } else {
       throw new IllegalArgumentException("Required argument \"pixel_format\" is missing and does not have an android:defaultValue");
     }
+    if (bundle.containsKey("physical_camera_id")) {
+      String physicalCameraId;
+      physicalCameraId = bundle.getString("physical_camera_id");
+      __result.arguments.put("physical_camera_id", physicalCameraId);
+    } else {
+      __result.arguments.put("physical_camera_id", null);
+    }
     return __result;
   }
 
@@ -69,6 +77,13 @@ public class CameraFragmentArgs implements NavArgs {
     } else {
       throw new IllegalArgumentException("Required argument \"pixel_format\" is missing and does not have an android:defaultValue");
     }
+    if (savedStateHandle.contains("physical_camera_id")) {
+      String physicalCameraId;
+      physicalCameraId = savedStateHandle.get("physical_camera_id");
+      __result.arguments.put("physical_camera_id", physicalCameraId);
+    } else {
+      __result.arguments.put("physical_camera_id", null);
+    }
     return __result;
   }
 
@@ -84,6 +99,12 @@ public class CameraFragmentArgs implements NavArgs {
   }
 
   @SuppressWarnings("unchecked")
+  @Nullable
+  public String getPhysicalCameraId() {
+    return (String) arguments.get("physical_camera_id");
+  }
+
+  @SuppressWarnings("unchecked")
   @NonNull
   public Bundle toBundle() {
     Bundle __result = new Bundle();
@@ -94,6 +115,12 @@ public class CameraFragmentArgs implements NavArgs {
     if (arguments.containsKey("pixel_format")) {
       int pixelFormat = (int) arguments.get("pixel_format");
       __result.putInt("pixel_format", pixelFormat);
+    }
+    if (arguments.containsKey("physical_camera_id")) {
+      String physicalCameraId = (String) arguments.get("physical_camera_id");
+      __result.putString("physical_camera_id", physicalCameraId);
+    } else {
+      __result.putString("physical_camera_id", null);
     }
     return __result;
   }
@@ -109,6 +136,12 @@ public class CameraFragmentArgs implements NavArgs {
     if (arguments.containsKey("pixel_format")) {
       int pixelFormat = (int) arguments.get("pixel_format");
       __result.set("pixel_format", pixelFormat);
+    }
+    if (arguments.containsKey("physical_camera_id")) {
+      String physicalCameraId = (String) arguments.get("physical_camera_id");
+      __result.set("physical_camera_id", physicalCameraId);
+    } else {
+      __result.set("physical_camera_id", null);
     }
     return __result;
   }
@@ -134,6 +167,12 @@ public class CameraFragmentArgs implements NavArgs {
     if (getPixelFormat() != that.getPixelFormat()) {
       return false;
     }
+    if (arguments.containsKey("physical_camera_id") != that.arguments.containsKey("physical_camera_id")) {
+      return false;
+    }
+    if (getPhysicalCameraId() != null ? !getPhysicalCameraId().equals(that.getPhysicalCameraId()) : that.getPhysicalCameraId() != null) {
+      return false;
+    }
     return true;
   }
 
@@ -142,6 +181,7 @@ public class CameraFragmentArgs implements NavArgs {
     int result = 1;
     result = 31 * result + (getCameraId() != null ? getCameraId().hashCode() : 0);
     result = 31 * result + getPixelFormat();
+    result = 31 * result + (getPhysicalCameraId() != null ? getPhysicalCameraId().hashCode() : 0);
     return result;
   }
 
@@ -150,6 +190,7 @@ public class CameraFragmentArgs implements NavArgs {
     return "CameraFragmentArgs{"
         + "cameraId=" + getCameraId()
         + ", pixelFormat=" + getPixelFormat()
+        + ", physicalCameraId=" + getPhysicalCameraId()
         + "}";
   }
 
@@ -193,6 +234,13 @@ public class CameraFragmentArgs implements NavArgs {
       return this;
     }
 
+    @NonNull
+    @SuppressWarnings("unchecked")
+    public Builder setPhysicalCameraId(@Nullable String physicalCameraId) {
+      this.arguments.put("physical_camera_id", physicalCameraId);
+      return this;
+    }
+
     @SuppressWarnings({"unchecked","GetterOnBuilder"})
     @NonNull
     public String getCameraId() {
@@ -202,6 +250,12 @@ public class CameraFragmentArgs implements NavArgs {
     @SuppressWarnings({"unchecked","GetterOnBuilder"})
     public int getPixelFormat() {
       return (int) arguments.get("pixel_format");
+    }
+
+    @SuppressWarnings({"unchecked","GetterOnBuilder"})
+    @Nullable
+    public String getPhysicalCameraId() {
+      return (String) arguments.get("physical_camera_id");
     }
   }
 }

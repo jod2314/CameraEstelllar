@@ -39,6 +39,11 @@ app:startDestination="@id/permissions_fragment" >
         android:name="pixel_format"
         app:argType="integer"
         app:nullable="false" />
+    <argument
+        android:name="physical_camera_id"
+        android:defaultValue="@null"
+        app:argType="string"
+        app:nullable="true" />
 
     <action
         android:id="@+id/action_camera_to_permissions"

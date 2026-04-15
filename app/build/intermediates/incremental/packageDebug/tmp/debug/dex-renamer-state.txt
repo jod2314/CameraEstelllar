@@ -1,9 +1,10 @@
-#Sat Apr 11 22:58:07 COT 2026
+#Wed Apr 15 12:14:37 COT 2026
 base.0=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes.dex
 base.1=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeLibDexDebug\\0\\classes.dex
 base.10=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\6\\classes.dex
 base.11=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\7\\classes.dex
-base.12=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes2.dex
+base.12=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\8\\classes.dex
+base.13=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeExtDexDebug\\classes2.dex
 base.2=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\0\\classes.dex
 base.3=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\10\\classes.dex
 base.4=C\:\\camerastelllarv3\\app\\build\\intermediates\\dex\\debug\\mergeProjectDexDebug\\11\\classes.dex
@@ -16,7 +17,8 @@ path.0=classes.dex
 path.1=0/classes.dex
 path.10=6/classes.dex
 path.11=7/classes.dex
-path.12=classes2.dex
+path.12=8/classes.dex
+path.13=classes2.dex
 path.2=0/classes.dex
 path.3=10/classes.dex
 path.4=11/classes.dex
@@ -30,6 +32,7 @@ renamed.1=classes2.dex
 renamed.10=classes11.dex
 renamed.11=classes12.dex
 renamed.12=classes13.dex
+renamed.13=classes14.dex
 renamed.2=classes3.dex
 renamed.3=classes4.dex
 renamed.4=classes5.dex

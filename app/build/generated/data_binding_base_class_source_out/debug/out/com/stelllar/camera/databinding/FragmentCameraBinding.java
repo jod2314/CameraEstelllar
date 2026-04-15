@@ -4,8 +4,10 @@ package com.stelllar.camera.databinding;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.viewbinding.ViewBinding;
@@ -21,19 +23,28 @@ public final class FragmentCameraBinding implements ViewBinding {
   private final FrameLayout rootView;
 
   @NonNull
+  public final Button btnTestExposure;
+
+  @NonNull
   public final ImageButton captureButton;
 
   @NonNull
   public final View overlay;
 
   @NonNull
+  public final TextView tvMaxExposure;
+
+  @NonNull
   public final AutoFitSurfaceView viewFinder;
 
-  private FragmentCameraBinding(@NonNull FrameLayout rootView, @NonNull ImageButton captureButton,
-      @NonNull View overlay, @NonNull AutoFitSurfaceView viewFinder) {
+  private FragmentCameraBinding(@NonNull FrameLayout rootView, @NonNull Button btnTestExposure,
+      @NonNull ImageButton captureButton, @NonNull View overlay, @NonNull TextView tvMaxExposure,
+      @NonNull AutoFitSurfaceView viewFinder) {
     this.rootView = rootView;
+    this.btnTestExposure = btnTestExposure;
     this.captureButton = captureButton;
     this.overlay = overlay;
+    this.tvMaxExposure = tvMaxExposure;
     this.viewFinder = viewFinder;
   }
 
@@ -64,6 +75,12 @@ public final class FragmentCameraBinding implements ViewBinding {
     // This is done to optimize the compiled bytecode for size and performance.
     int id;
     missingId: {
+      id = R.id.btn_test_exposure;
+      Button btnTestExposure = ViewBindings.findChildViewById(rootView, id);
+      if (btnTestExposure == null) {
+        break missingId;
+      }
+
       id = R.id.capture_button;
       ImageButton captureButton = ViewBindings.findChildViewById(rootView, id);
       if (captureButton == null) {
@@ -76,13 +93,20 @@ public final class FragmentCameraBinding implements ViewBinding {
         break missingId;
       }
 
+      id = R.id.tv_max_exposure;
+      TextView tvMaxExposure = ViewBindings.findChildViewById(rootView, id);
+      if (tvMaxExposure == null) {
+        break missingId;
+      }
+
       id = R.id.view_finder;
       AutoFitSurfaceView viewFinder = ViewBindings.findChildViewById(rootView, id);
       if (viewFinder == null) {
         break missingId;
       }
 
-      return new FragmentCameraBinding((FrameLayout) rootView, captureButton, overlay, viewFinder);
+      return new FragmentCameraBinding((FrameLayout) rootView, btnTestExposure, captureButton,
+          overlay, tvMaxExposure, viewFinder);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

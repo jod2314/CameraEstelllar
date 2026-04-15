@@ -34,6 +34,8 @@ import com.stelllar.camera.utils.OrientationLiveData
 import com.stelllar.camera.utils.getPreviewOutputSize
 import kotlinx.coroutines.launch
 
+import javax.inject.Inject
+
 @AndroidEntryPoint
 class CameraFragment : Fragment() {
 
@@ -67,6 +69,8 @@ class CameraFragment : Fragment() {
             }, CameraActivity.ANIMATION_FAST_MILLIS)
         }
     }
+
+
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -164,31 +168,30 @@ class CameraFragment : Fragment() {
                     // RESET DEL HAL: Delay masivo para permitir al CameraService resetearse tras el error reason 0
                     kotlinx.coroutines.delay(2000) 
                     
-                    val maxNs = com.stelllar.camera.data.camera.SensorProber(requireContext(), cameraManager).runProbe(args.cameraId, args.physicalCameraId)
-                    
-                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                        if (maxNs > 0) {
-                            prefs.edit().putLong("max_exposure_ns_${args.cameraId}", maxNs).apply()
-                            fragmentCameraBinding.tvMaxExposure.text = "Máxima real: ${maxNs / 1e9}s"
-                            android.widget.Toast.makeText(requireContext(), "Test Exitoso: ${maxNs / 1e9}s", android.widget.Toast.LENGTH_LONG).show()
-                        } else {
-                            fragmentCameraBinding.tvMaxExposure.text = "Fallo al detectar máximo"
-                            android.widget.Toast.makeText(requireContext(), "La cámara no soporta exposición prolongada", android.widget.Toast.LENGTH_LONG).show()
-                        }
-                        fragmentCameraBinding.btnTestExposure.isEnabled = true
-                        fragmentCameraBinding.captureButton.isEnabled = true
-                        
-                        // RESET DEL HAL POST-PROBA: Delay antes de reabrir
-                        kotlinx.coroutines.delay(1000)
+                    viewModel.runSensorProbe(args.cameraId, args.physicalCameraId) { maxNs ->
+                        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                            if (maxNs > 0) {
+                                fragmentCameraBinding.tvMaxExposure.text = "Máxima real: ${maxNs / 1e9}s"
+                                android.widget.Toast.makeText(requireContext(), "Test Exitoso: ${maxNs / 1e9}s", android.widget.Toast.LENGTH_LONG).show()
+                            } else {
+                                fragmentCameraBinding.tvMaxExposure.text = "Fallo al detectar máximo"
+                                android.widget.Toast.makeText(requireContext(), "La cámara no soporta exposición prolongada", android.widget.Toast.LENGTH_LONG).show()
+                            }
+                            fragmentCameraBinding.btnTestExposure.isEnabled = true
+                            fragmentCameraBinding.captureButton.isEnabled = true
+                            
+                            // RESET DEL HAL POST-PROBA: Delay antes de reabrir
+                            kotlinx.coroutines.delay(1000)
 
-                        // Reiniciar la cámara normal
-                        viewModel.initializeCamera(
-                            args.cameraId,
-                            args.physicalCameraId,
-                            args.pixelFormat,
-                            fragmentCameraBinding.viewFinder.holder.surface,
-                            relativeOrientation.value ?: 0
-                        )
+                            // Reiniciar la cámara normal
+                            viewModel.initializeCamera(
+                                args.cameraId,
+                                args.physicalCameraId,
+                                args.pixelFormat,
+                                fragmentCameraBinding.viewFinder.holder.surface,
+                                relativeOrientation.value ?: 0
+                            )
+                        }
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Sondeo fallido", e)
