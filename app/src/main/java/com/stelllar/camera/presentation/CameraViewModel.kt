@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 @HiltViewModel
@@ -26,22 +27,24 @@ class CameraViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<CameraState>(CameraState.Idle)
     val uiState: StateFlow<CameraState> = _uiState.asStateFlow()
 
-    fun initializeCamera(
+    suspend fun initializeCamera(
         cameraId: String,
         physicalCameraId: String?,
         pixelFormat: Int,
-        previewSurface: Surface,
+        previewSurface: android.view.Surface,
         rotation: Int
-    ) {
-        viewModelScope.launch {
-            _uiState.value = CameraState.Initializing
-            try {
-                cameraRepository.updateDeviceRotation(rotation)
-                cameraRepository.initializeCamera(cameraId, physicalCameraId, pixelFormat, previewSurface)
-                _uiState.value = CameraState.Ready()
-            } catch (e: Exception) {
-                _uiState.value = CameraState.Error("Fallo al inicializar la cámara", e)
-            }
+    ): android.util.Size {
+        _uiState.value = CameraState.Initializing
+        cameraRepository.updateDeviceRotation(rotation)
+        val size = cameraRepository.initializeCamera(cameraId, physicalCameraId, pixelFormat, previewSurface)
+        _uiState.value = CameraState.Ready()
+        return size
+    }
+
+    fun updateParameters(parameters: CameraParameters) {
+        val currentState = _uiState.value
+        if (currentState is CameraState.Ready) {
+            _uiState.value = CameraState.Ready(parameters)
         }
     }
 
@@ -54,13 +57,24 @@ class CameraViewModel @Inject constructor(
         if (currentState !is CameraState.Ready) return
         
         viewModelScope.launch {
+            val params = currentState.parameters
+            
+            // 1. Manejo del Temporizador
+            if (params.timerSeconds > 0) {
+                // Podríamos emitir un estado de "CountingDown" si fuera necesario
+                delay(params.timerSeconds * 1000L)
+            }
+
             _uiState.value = CameraState.Capturing
             try {
-                val result = capturePhotoUseCase(onCaptureStarted, currentState.parameters)
-                onPhotoSaved(result)
-                _uiState.value = CameraState.Ready(currentState.parameters)
+                // 2. Manejo de Ráfaga (Tomas múltiples)
+                repeat(params.frameCount) { index ->
+                    val result = capturePhotoUseCase(onCaptureStarted, params)
+                    onPhotoSaved(result)
+                }
+                _uiState.value = CameraState.Ready(params)
             } catch (e: Exception) {
-                _uiState.value = CameraState.Error("Error al capturar la foto: ${e.message}", e)
+                _uiState.value = CameraState.Error("Error al capturar: ${e.message}", e)
             }
         }
     }

@@ -1,1 +1,6 @@
-utils/
+.gradle
+build/
+.idea
+*.apk
+bin/
+obj/

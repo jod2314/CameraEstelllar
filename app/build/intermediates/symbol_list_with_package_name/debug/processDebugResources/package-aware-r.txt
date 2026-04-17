@@ -3066,10 +3066,6 @@ drawable ic_mtrl_chip_checked_circle
 drawable ic_mtrl_chip_close_circle
 drawable ic_photo
 drawable ic_search_black_24
-drawable ic_shutter
-drawable ic_shutter_focused
-drawable ic_shutter_normal
-drawable ic_shutter_pressed
 drawable indeterminate_static
 drawable m3_avd_hide_password
 drawable m3_avd_show_password

@@ -3,7 +3,9 @@ package com.stelllar.camera.domain
 data class CameraParameters(
     val iso: Int? = null,
     val exposureTimeNs: Long? = null,
-    val focusDistance: Float? = null
+    val focusDistance: Float? = null,
+    val frameCount: Int = 1,
+    val timerSeconds: Int = 0
 )
 
 sealed class CameraState {

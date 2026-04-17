@@ -7,7 +7,6 @@ import android.view.View;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.SavedStateHandle;
 import androidx.lifecycle.ViewModel;
-import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import com.stelllar.camera.data.camera.CameraControllerImpl;
 import com.stelllar.camera.data.camera.SensorProber;
 import com.stelllar.camera.data.repository.SettingsRepositoryImpl;
@@ -16,7 +15,6 @@ import com.stelllar.camera.domain.usecase.CapturePhotoUseCase;
 import com.stelllar.camera.domain.usecase.GetCamerasUseCase;
 import com.stelllar.camera.domain.usecase.ProbeSensorUseCase;
 import com.stelllar.camera.fragments.CameraFragment;
-import com.stelllar.camera.fragments.CameraFragment_MembersInjector;
 import com.stelllar.camera.fragments.ImageViewerFragment;
 import com.stelllar.camera.fragments.PermissionsFragment;
 import com.stelllar.camera.fragments.SelectorFragment;
@@ -327,7 +325,6 @@ public final class DaggerCameraStellarApplication_HiltComponents_SingletonC {
 
     @Override
     public void injectCameraFragment(CameraFragment arg0) {
-      injectCameraFragment2(arg0);
     }
 
     @Override
@@ -350,12 +347,6 @@ public final class DaggerCameraStellarApplication_HiltComponents_SingletonC {
     @Override
     public ViewWithFragmentComponentBuilder viewWithFragmentComponentBuilder() {
       return new ViewWithFragmentCBuilder(singletonCImpl, activityRetainedCImpl, activityCImpl, fragmentCImpl);
-    }
-
-    @CanIgnoreReturnValue
-    private CameraFragment injectCameraFragment2(CameraFragment instance) {
-      CameraFragment_MembersInjector.injectSensorProber(instance, singletonCImpl.sensorProberProvider.get());
-      return instance;
     }
   }
 
@@ -580,11 +571,11 @@ public final class DaggerCameraStellarApplication_HiltComponents_SingletonC {
 
     private final SingletonCImpl singletonCImpl = this;
 
+    private Provider<CameraControllerImpl> cameraControllerImplProvider;
+
     private Provider<CameraManager> provideCameraManagerProvider;
 
     private Provider<SensorProber> sensorProberProvider;
-
-    private Provider<CameraControllerImpl> cameraControllerImplProvider;
 
     private Provider<SettingsRepositoryImpl> settingsRepositoryImplProvider;
 
@@ -596,14 +587,14 @@ public final class DaggerCameraStellarApplication_HiltComponents_SingletonC {
 
     @SuppressWarnings("unchecked")
     private void initialize(final ApplicationContextModule applicationContextModuleParam) {
-      this.provideCameraManagerProvider = DoubleCheck.provider(new SwitchingProvider<CameraManager>(singletonCImpl, 1));
-      this.sensorProberProvider = DoubleCheck.provider(new SwitchingProvider<SensorProber>(singletonCImpl, 0));
-      this.cameraControllerImplProvider = DoubleCheck.provider(new SwitchingProvider<CameraControllerImpl>(singletonCImpl, 2));
+      this.cameraControllerImplProvider = DoubleCheck.provider(new SwitchingProvider<CameraControllerImpl>(singletonCImpl, 0));
+      this.provideCameraManagerProvider = DoubleCheck.provider(new SwitchingProvider<CameraManager>(singletonCImpl, 2));
+      this.sensorProberProvider = DoubleCheck.provider(new SwitchingProvider<SensorProber>(singletonCImpl, 1));
       this.settingsRepositoryImplProvider = DoubleCheck.provider(new SwitchingProvider<SettingsRepositoryImpl>(singletonCImpl, 3));
     }
 
     @Override
-    public void injectCameraStellarApplication(CameraStellarApplication arg0) {
+    public void injectCameraStellarApplication(CameraStellarApplication cameraStellarApplication) {
     }
 
     @Override
@@ -635,14 +626,14 @@ public final class DaggerCameraStellarApplication_HiltComponents_SingletonC {
       @Override
       public T get() {
         switch (id) {
-          case 0: // com.stelllar.camera.data.camera.SensorProber 
+          case 0: // com.stelllar.camera.data.camera.CameraControllerImpl 
+          return (T) new CameraControllerImpl(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
+
+          case 1: // com.stelllar.camera.data.camera.SensorProber 
           return (T) new SensorProber(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule), singletonCImpl.provideCameraManagerProvider.get());
 
-          case 1: // android.hardware.camera2.CameraManager 
+          case 2: // android.hardware.camera2.CameraManager 
           return (T) CameraModule_Companion_ProvideCameraManagerFactory.provideCameraManager(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
-
-          case 2: // com.stelllar.camera.data.camera.CameraControllerImpl 
-          return (T) new CameraControllerImpl(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));
 
           case 3: // com.stelllar.camera.data.repository.SettingsRepositoryImpl 
           return (T) new SettingsRepositoryImpl(ApplicationContextModule_ProvideContextFactory.provideContext(singletonCImpl.applicationContextModule));

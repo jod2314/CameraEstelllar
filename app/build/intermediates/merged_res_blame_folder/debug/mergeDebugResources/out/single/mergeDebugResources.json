@@ -16,10 +16,6 @@
         "source": "com.stelllar.camera.app-main-69:/drawable-xxhdpi/ic_launcher.png"
     },
     {
-        "merged": "com.stelllar.camera.app-debug-67:/layout_fragment_camera.xml.flat",
-        "source": "com.stelllar.camera.app-main-69:/layout/fragment_camera.xml"
-    },
-    {
         "merged": "com.stelllar.camera.app-debug-67:/layout_activity_camera.xml.flat",
         "source": "com.stelllar.camera.app-main-69:/layout/activity_camera.xml"
     },

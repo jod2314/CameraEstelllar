@@ -6,11 +6,11 @@ import com.stelllar.camera.domain.CameraParameters
 interface CameraRepository {
     
     suspend fun initializeCamera(
-        cameraId: String, 
+        cameraId: String,
         physicalCameraId: String?,
-        pixelFormat: Int, 
-        previewSurface: Surface
-    )
+        pixelFormat: Int,
+        previewSurface: android.view.Surface
+    ): android.util.Size
 
     fun updateDeviceRotation(rotation: Int)
 

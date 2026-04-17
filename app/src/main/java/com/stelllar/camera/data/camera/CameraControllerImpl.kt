@@ -15,6 +15,7 @@ import android.os.HandlerThread
 import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
+import android.view.SurfaceHolder
 import com.stelllar.camera.domain.CameraParameters
 import com.stelllar.camera.domain.repository.CameraRepository
 import com.stelllar.camera.domain.repository.PhotoResult
@@ -70,7 +71,12 @@ class CameraControllerImpl @Inject constructor(
         }
     }
 
-    override suspend fun initializeCamera(cameraId: String, physicalCameraId: String?, pixelFormat: Int, previewSurface: Surface) {
+    override suspend fun initializeCamera(
+        cameraId: String, 
+        physicalCameraId: String?, 
+        pixelFormat: Int, 
+        previewSurface: Surface
+    ): android.util.Size {
         initThreads()
         this.activePhysicalCameraId = physicalCameraId
         characteristics = if (physicalCameraId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -81,10 +87,18 @@ class CameraControllerImpl @Inject constructor(
         
         camera = openCamera(cameraManager, cameraId, cameraHandler)
 
-        val size = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
-            .getOutputSizes(pixelFormat).maxByOrNull { it.height * it.width }!!
+        val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)!!
+        
+        // Tamaño máximo para captura (RAW o JPEG)
+        val captureSize = map.getOutputSizes(pixelFormat).maxByOrNull { it.height * it.width }!!
+        imageReader = ImageReader.newInstance(captureSize.width, captureSize.height, pixelFormat, IMAGE_BUFFER_SIZE)
+
+        // Tamaño inteligente para Preview (No exceder 1080p y que coincida con el aspecto)
+        val previewSize = map.getOutputSizes(SurfaceHolder::class.java)
+            .filter { it.width <= 1920 && it.height <= 1080 }
+            .maxByOrNull { it.width * it.height } ?: captureSize
             
-        imageReader = ImageReader.newInstance(size.width, size.height, pixelFormat, IMAGE_BUFFER_SIZE)
+        Timber.i("Configurando cámara: Captura=${captureSize.width}x${captureSize.height}, Preview=${previewSize.width}x${previewSize.height}")
 
         val targets = listOf(previewSurface, imageReader.surface)
         session = createCaptureSession(camera, targets, physicalCameraId, cameraHandler)
@@ -93,6 +107,8 @@ class CameraControllerImpl @Inject constructor(
             addTarget(previewSurface)
         }
         session.setRepeatingRequest(captureRequest.build(), null, cameraHandler)
+        
+        return previewSize
     }
 
     override fun updateDeviceRotation(rotation: Int) {
