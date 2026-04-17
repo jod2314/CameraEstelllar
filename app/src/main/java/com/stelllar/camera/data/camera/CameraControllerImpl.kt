@@ -103,14 +103,22 @@ class CameraControllerImpl @Inject constructor(
         onCaptureStarted: () -> Unit,
         parameters: CameraParameters
     ): PhotoResult = withContext(Dispatchers.IO) {
-        val result = captureImage(onCaptureStarted, parameters)
-        
-        Timber.d("Result received: $result")
-        val photoResult = saveResult(result)
-        Timber.d("Image saved to MediaStore: ${photoResult.uriString}")
+        try {
+            // Iniciar servicio en primer plano para evitar que el SO cierre la app
+            com.stelllar.camera.services.CameraForegroundService.start(context)
+            
+            val result = captureImage(onCaptureStarted, parameters)
+            
+            Timber.d("Result received: $result")
+            val photoResult = saveResult(result)
+            Timber.d("Image saved to MediaStore: ${photoResult.uriString}")
 
-        result.close()
-        photoResult
+            result.close()
+            photoResult
+        } finally {
+            // Detener el servicio independientemente del resultado
+            com.stelllar.camera.services.CameraForegroundService.stop(context)
+        }
     }
 
     override fun closeCamera() {
@@ -178,19 +186,26 @@ class CameraControllerImpl @Inject constructor(
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val availableSessionKeys = characteristics.availableSessionKeys ?: emptyList<CaptureRequest.Key<*>>()
+            
             val fpsRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
             val lowestFpsRange = fpsRanges?.minByOrNull { it.upper }
             val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
 
-            val sessionParams = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
+            val sessionParamsBuilder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                 set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
-                if (lowestFpsRange != null) {
+                
+                if (availableSessionKeys.contains(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE) && lowestFpsRange != null) {
                     set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, lowestFpsRange)
+                    Timber.d("Aplicando CONTROL_AE_TARGET_FPS_RANGE como parámetro de sesión")
                 }
-                if (maxFrameDuration != null) {
+                
+                if (availableSessionKeys.contains(CaptureRequest.SENSOR_FRAME_DURATION) && maxFrameDuration != null) {
                     set(CaptureRequest.SENSOR_FRAME_DURATION, maxFrameDuration)
+                    Timber.d("Aplicando SENSOR_FRAME_DURATION como parámetro de sesión")
                 }
-            }.build()
+            }
+            val sessionParams = sessionParamsBuilder.build()
 
             val outputConfigs = targets.map { 
                 android.hardware.camera2.params.OutputConfiguration(it).apply {
@@ -395,8 +410,8 @@ class CameraControllerImpl @Inject constructor(
     }
 
     companion object {
-        private const val IMAGE_BUFFER_SIZE: Int = 3
-        private const val IMAGE_CAPTURE_TIMEOUT_MILLIS: Long = 5000
+        private const val IMAGE_BUFFER_SIZE: Int = 5
+        private const val IMAGE_CAPTURE_TIMEOUT_MILLIS: Long = 60000 // Aumentado para exposiciones largas
 
         data class CombinedCaptureResult(
             val image: Image,

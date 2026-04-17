@@ -66,11 +66,13 @@ class PermissionsFragment : Fragment() {
     }
 
     companion object {
-        private val PERMISSIONS_REQUIRED = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            arrayOf(Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES)
-        } else {
-            arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-        }
+        private val PERMISSIONS_REQUIRED = mutableListOf(Manifest.permission.CAMERA).apply {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }.toTypedArray()
 
         /** Verifica si todos los permisos requeridos están concedidos */
         fun hasPermissions(context: Context) = PERMISSIONS_REQUIRED.all {

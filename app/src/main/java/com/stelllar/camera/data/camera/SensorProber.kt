@@ -87,20 +87,23 @@ class SensorProber @Inject constructor(
             }
             
             // === CONFIGURACIÓN DE BYPASS PARA HAL v2 ===
+            val availableSessionKeys = characteristics.availableSessionKeys ?: emptyList<CaptureRequest.Key<*>>()
             val sessionParamsBuilder = camera.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             sessionParamsBuilder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             
             // Usar el rango de FPS más bajo disponible dinámicamente
             val fpsRanges = characteristics.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES)
             val lowestFpsRange = fpsRanges?.minByOrNull { it.upper }
-            if (lowestFpsRange != null) {
+            if (lowestFpsRange != null && availableSessionKeys.contains(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE)) {
                 sessionParamsBuilder.set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, lowestFpsRange)
+                Timber.d("Prober: Aplicando CONTROL_AE_TARGET_FPS_RANGE como parámetro de sesión")
             }
             
             // CRÍTICO: Declarar el Frame Duration Máximo al crear la sesión
             val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION)
-            if (maxFrameDuration != null) {
+            if (maxFrameDuration != null && availableSessionKeys.contains(CaptureRequest.SENSOR_FRAME_DURATION)) {
                 sessionParamsBuilder.set(CaptureRequest.SENSOR_FRAME_DURATION, maxFrameDuration)
+                Timber.d("Prober: Aplicando SENSOR_FRAME_DURATION como parámetro de sesión")
             }
 
             session = createSession(camera, listOf(outputConfig), sessionParamsBuilder.build())
