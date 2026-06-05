@@ -91,7 +91,8 @@ class GetCamerasUseCase @Inject constructor(
         val isoStr = isoRange?.let { "${it.lower}-${it.upper}" } ?: "N/A"
 
         // Exposición
-        val savedMaxNs = settingsRepository.getMaxExposureNs(logicalId)
+        val targetId = physicalId ?: logicalId
+        val savedMaxNs = settingsRepository.getMaxExposureNs(targetId)
         val expStr = if (savedMaxNs > 0) {
             "Max: %.1fs (Real)".format(savedMaxNs / 1e9)
         } else {

@@ -44,8 +44,11 @@ fun CameraScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     
+    // Identificador único para el sensor (físico si está disponible, de lo contrario lógico)
+    val sensorId = physicalCameraId ?: cameraId
+    
     // Configuración de Exposición guardada obtenida del ViewModel (Capa de negocio/datos)
-    var savedMax by remember(cameraId) { mutableStateOf(viewModel.getMaxExposureNs(cameraId)) }
+    var savedMax by remember(sensorId) { mutableStateOf(viewModel.getMaxExposureNs(sensorId)) }
     
     // Rangos del hardware
     val isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: android.util.Range(100, 3200)
@@ -53,10 +56,10 @@ fun CameraScreen(
     val effectiveMaxExposure = if (savedMax > 0) savedMax else theoreticalMaxExp
 
     // Estados de los controles manuales
-    var currentIso by remember(cameraId) { mutableStateOf(isoRange.lower.toFloat()) }
-    var currentExposure by remember(cameraId) { mutableStateOf(effectiveMaxExposure.toFloat()) }
-    var currentBurst by remember(cameraId) { mutableIntStateOf(1) }
-    var currentTimer by remember(cameraId) { mutableIntStateOf(0) }
+    var currentIso by remember(sensorId) { mutableStateOf(isoRange.lower.toFloat()) }
+    var currentExposure by remember(sensorId) { mutableStateOf(effectiveMaxExposure.toFloat()) }
+    var currentBurst by remember(sensorId) { mutableIntStateOf(1) }
+    var currentTimer by remember(sensorId) { mutableIntStateOf(0) }
 
     // Sincronizar cambios con el ViewModel
     LaunchedEffect(currentIso, currentExposure, currentBurst, currentTimer) {
@@ -71,7 +74,7 @@ fun CameraScreen(
     }
 
     // Liberar la cámara de forma segura al desmontar o cambiar de sensor
-    DisposableEffect(cameraId) {
+    DisposableEffect(sensorId) {
         onDispose {
             viewModel.closeCamera()
         }
@@ -217,7 +220,7 @@ fun CameraScreen(
                             viewModel.runSensorProbe(cameraId, physicalCameraId) { maxNs ->
                                 if (maxNs > 0) {
                                     savedMax = maxNs
-                                    viewModel.saveMaxExposureNs(cameraId, maxNs)
+                                    viewModel.saveMaxExposureNs(sensorId, maxNs)
                                     currentExposure = maxNs.toFloat()
                                     onShowToast("Bypass Exitoso: ${maxNs / 1e9}s")
                                 } else {
