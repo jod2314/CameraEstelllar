@@ -1,58 +1,149 @@
-/*
- * Copyright 2020 The Android Open Source Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.stelllar.camera
 
-import dagger.hilt.android.AndroidEntryPoint
+import android.content.Context
+import android.hardware.camera2.CameraManager
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
-import androidx.appcompat.app.AppCompatActivity
-import com.stelllar.camera.databinding.ActivityCameraBinding
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import androidx.compose.runtime.*
+import androidx.lifecycle.Observer
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.stelllar.camera.presentation.CameraViewModel
+import com.stelllar.camera.presentation.SelectorViewModel
+import com.stelllar.camera.presentation.compose.CameraScreen
+import com.stelllar.camera.presentation.compose.CameraSelectorScreen
+import com.stelllar.camera.presentation.compose.ImageViewerScreen
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
+import com.stelllar.camera.presentation.compose.PermissionsScreen
+import com.stelllar.camera.utils.OrientationLiveData
+import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
-class CameraActivity : AppCompatActivity() {
+class CameraActivity : ComponentActivity() {
 
-    private lateinit var activityCameraBinding: ActivityCameraBinding
+    private val cameraViewModel: CameraViewModel by viewModels()
+    private val selectorViewModel: SelectorViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        activityCameraBinding = ActivityCameraBinding.inflate(layoutInflater)
-        setContentView(activityCameraBinding.root)
+        
+        setContent {
+            val navController = rememberNavController()
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                NavHost(navController = navController, startDestination = "permissions") {
+                    composable("permissions") {
+                        PermissionsScreen(
+                            onPermissionsGranted = {
+                                navController.navigate("selector") {
+                                    popUpTo("permissions") { inclusive = true }
+                                }
+                            },
+                            onShowToast = { msg ->
+                                Toast.makeText(this@CameraActivity, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                    composable("selector") {
+                        CameraSelectorScreen(
+                            viewModel = selectorViewModel,
+                            onCameraSelected = { item ->
+                                navController.navigate("camera/${item.logicalId}/${item.format}?physicalCameraId=${item.physicalId}")
+                            }
+                        )
+                    }
+                    composable(
+                        route = "camera/{logicalCameraId}/{pixelFormat}?physicalCameraId={physicalCameraId}",
+                        arguments = listOf(
+                            navArgument("logicalCameraId") { type = NavType.StringType },
+                            navArgument("pixelFormat") { type = NavType.IntType },
+                            navArgument("physicalCameraId") {
+                                type = NavType.StringType
+                                nullable = true
+                                defaultValue = null
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val logicalCameraId = backStackEntry.arguments?.getString("logicalCameraId") ?: ""
+                        val pixelFormat = backStackEntry.arguments?.getInt("pixelFormat") ?: 0
+                        val physicalCameraId = backStackEntry.arguments?.getString("physicalCameraId")
+                        
+                        val cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                        val characteristics = remember(logicalCameraId) {
+                            cameraManager.getCameraCharacteristics(logicalCameraId)
+                        }
+                        val relativeOrientation = remember(logicalCameraId) {
+                            OrientationLiveData(this@CameraActivity, characteristics)
+                        }
+
+                        var orientation by remember { mutableStateOf(0) }
+                        DisposableEffect(relativeOrientation) {
+                            val observer = Observer<Int> { value ->
+                                orientation = value
+                                cameraViewModel.updateRotation(value)
+                            }
+                            relativeOrientation.observeForever(observer)
+                            onDispose {
+                                relativeOrientation.removeObserver(observer)
+                            }
+                        }
+
+                        CameraScreen(
+                            viewModel = cameraViewModel,
+                            cameraId = logicalCameraId,
+                            physicalCameraId = physicalCameraId,
+                            pixelFormat = pixelFormat,
+                            characteristics = characteristics,
+                            orientation = orientation,
+                            onShowToast = { msg ->
+                                Toast.makeText(this@CameraActivity, msg, Toast.LENGTH_SHORT).show()
+                            },
+                            onNavigateToViewer = { photoResult ->
+                                navController.navigate("viewer/${Uri.encode(photoResult.uriString)}")
+                            }
+                        )
+                    }
+                    composable(
+                        route = "viewer/{filePath}",
+                        arguments = listOf(
+                            navArgument("filePath") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val filePath = backStackEntry.arguments?.getString("filePath") ?: ""
+                        ImageViewerScreen(
+                            filePath = filePath,
+                            onBackClick = {
+                                navController.popBackStack()
+                            }
+                        )
+                    }
+                }
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // Before setting full screen flags, we must wait a bit to let UI settle; otherwise, we may
-        // be trying to set app to immersive mode before it's ready and the flags do not stick
-        activityCameraBinding.fragmentContainer.postDelayed({
-            activityCameraBinding.fragmentContainer.systemUiVisibility = FLAGS_FULLSCREEN
+        window.decorView.postDelayed({
+            window.decorView.systemUiVisibility = FLAGS_FULLSCREEN
         }, IMMERSIVE_FLAG_TIMEOUT)
     }
 
     companion object {
-        /** Combination of all flags required to put activity into immersive mode */
         const val FLAGS_FULLSCREEN =
                 View.SYSTEM_UI_FLAG_LOW_PROFILE or
                         View.SYSTEM_UI_FLAG_FULLSCREEN or
                         View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
                         View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
 
-        /** Milliseconds used for UI animations */
-        const val ANIMATION_FAST_MILLIS = 50L
-        const val ANIMATION_SLOW_MILLIS = 100L
         private const val IMMERSIVE_FLAG_TIMEOUT = 500L
     }
 }

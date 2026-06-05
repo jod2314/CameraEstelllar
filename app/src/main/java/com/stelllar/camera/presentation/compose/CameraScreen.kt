@@ -37,7 +37,8 @@ fun CameraScreen(
     pixelFormat: Int,
     characteristics: CameraCharacteristics,
     orientation: Int,
-    onShowToast: (String) -> Unit
+    onShowToast: (String) -> Unit,
+    onNavigateToViewer: (com.stelllar.camera.domain.repository.PhotoResult) -> Unit
 ) {
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsState()
@@ -262,6 +263,7 @@ fun CameraScreen(
                     },
                     onPhotoSaved = { photoResult ->
                         onShowToast("Guardado: ${photoResult.name}")
+                        onNavigateToViewer(photoResult)
                     }
                 )
             },
