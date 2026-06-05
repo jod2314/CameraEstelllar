@@ -181,6 +181,117 @@ namespace {
 
         return best_stars;
     }
+
+    // Clase auxiliar para Sigma Clipping en paralelo que hereda de cv::ParallelLoopBody
+    class ParallelSigmaClipping : public cv::ParallelLoopBody {
+    private:
+        int m_width;
+        int m_height;
+        const std::vector<std::unique_ptr<uint16_t[]>>& m_aligned_frames;
+        cv::Mat& m_output_bayer;
+
+    public:
+        ParallelSigmaClipping(int width, int height,
+                              const std::vector<std::unique_ptr<uint16_t[]>>& aligned_frames,
+                              cv::Mat& output_bayer)
+            : m_width(width), m_height(height), m_aligned_frames(aligned_frames), m_output_bayer(output_bayer) {}
+
+        void operator()(const cv::Range& range) const override {
+            int N = static_cast<int>(m_aligned_frames.size());
+            if (N <= 0) return;
+
+            // Vectores locales para reutilizar memoria dentro de este hilo
+            std::vector<uint16_t> vals(N);
+            std::vector<uint16_t> abs_diffs(N);
+            std::vector<uint16_t> temp_vals(N);
+            std::vector<uint16_t> temp_diffs(N);
+
+            for (int y = range.start; y < range.end; ++y) {
+                uint16_t* row_ptr = m_output_bayer.ptr<uint16_t>(y);
+                int row_offset = y * m_width;
+
+                for (int x = 0; x < m_width; ++x) {
+                    int pixel_idx = row_offset + x;
+
+                    // Recolectar intensidades de todos los frames alineados
+                    for (int i = 0; i < N; ++i) {
+                        vals[i] = m_aligned_frames[i][pixel_idx];
+                    }
+
+                    if (N < 3) {
+                        // Promedio directo para rafagas cortas
+                        uint32_t sum = 0;
+                        for (int i = 0; i < N; ++i) {
+                            sum += vals[i];
+                        }
+                        row_ptr[x] = static_cast<uint16_t>((sum + (N / 2)) / N);
+                    } else {
+                        // Copiar y calcular la mediana
+                        std::copy(vals.begin(), vals.end(), temp_vals.begin());
+                        auto median_it = temp_vals.begin() + N / 2;
+                        std::nth_element(temp_vals.begin(), median_it, temp_vals.end());
+                        double median = static_cast<double>(*median_it);
+
+                        // Calcular la Desviacion Absoluta Mediana (MAD)
+                        for (int i = 0; i < N; ++i) {
+                            abs_diffs[i] = static_cast<uint16_t>(std::abs(static_cast<double>(vals[i]) - median));
+                        }
+
+                        std::copy(abs_diffs.begin(), abs_diffs.end(), temp_diffs.begin());
+                        auto mad_it = temp_diffs.begin() + N / 2;
+                        std::nth_element(temp_diffs.begin(), mad_it, temp_diffs.end());
+                        double mad = static_cast<double>(*mad_it);
+
+                        // Establecer umbral de rechazo
+                        double threshold = std::max(2.5 * mad, 10.0);
+
+                        // Filtrar y promediar pixeles validos
+                        double sum = 0;
+                        int count = 0;
+                        for (int i = 0; i < N; ++i) {
+                            if (static_cast<double>(abs_diffs[i]) <= threshold) {
+                                sum += vals[i];
+                                count++;
+                            }
+                        }
+
+                        if (count > 0) {
+                            row_ptr[x] = static_cast<uint16_t>((sum / count) + 0.5);
+                        } else {
+                            row_ptr[x] = static_cast<uint16_t>(median);
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    // Clase auxiliar para aplicar la LUT de 16 bits a 8 bits de forma paralela
+    class ParallelLUTApply : public cv::ParallelLoopBody {
+    private:
+        const cv::Mat& m_input_bgr16;
+        cv::Mat& m_output_bgr8;
+        const uint8_t* m_lut;
+
+    public:
+        ParallelLUTApply(const cv::Mat& input_bgr16, cv::Mat& output_bgr8, const uint8_t* lut)
+            : m_input_bgr16(input_bgr16), m_output_bgr8(output_bgr8), m_lut(lut) {}
+
+        void operator()(const cv::Range& range) const override {
+            int cols = m_input_bgr16.cols;
+            for (int y = range.start; y < range.end; ++y) {
+                const uint16_t* src_row = m_input_bgr16.ptr<uint16_t>(y);
+                uint8_t* dst_row = m_output_bgr8.ptr<uint8_t>(y);
+
+                for (int x = 0; x < cols; ++x) {
+                    int idx_src = x * 3;
+                    dst_row[idx_src]     = m_lut[src_row[idx_src]];     // B
+                    dst_row[idx_src + 1] = m_lut[src_row[idx_src + 1]]; // G
+                    dst_row[idx_src + 2] = m_lut[src_row[idx_src + 2]]; // R
+                }
+            }
+        }
+    };
 }
 
 extern "C"
@@ -501,19 +612,118 @@ JNIEXPORT jboolean JNICALL
 Java_com_stelllar_camera_domain_stacking_NativeStacker_finalizeStacking(
     JNIEnv *env, jobject thiz, jobject outBuffer) {
     
+    // Proteger el metodo con el mutex de sesion
     std::lock_guard<std::mutex> lock(StackerSession::session_mutex);
     
-    if (!outBuffer) return JNI_FALSE;
-    
-    void* raw_data = env->GetDirectBufferAddress(outBuffer);
-    if (!raw_data) return JNI_FALSE;
+    if (!outBuffer) {
+        LOGE("Error: El buffer de salida es nulo.");
+        return JNI_FALSE;
+    }
 
-    LOGI("Finalizando apilamiento en el buffer de salida...");
-    LOGI("Cantidad de frames alineados en memoria: %zu", StackerSession::g_aligned_light_frames.size());
-    
-    // TODO: Esperar a que el computo de Vulkan termine
-    // TODO: Descargar de GPU/SSBO de vuelta al buffer de CPU
-    
+    // Verificar que tengamos frames acumulados
+    if (StackerSession::g_aligned_light_frames.empty()) {
+        LOGE("Error: No hay frames alineados para apilar.");
+        return JNI_FALSE;
+    }
+
+    int width = StackerSession::g_width;
+    int height = StackerSession::g_height;
+
+    LOGI("Finalizando apilamiento de %zu frames (%dx%d)...", 
+         StackerSession::g_aligned_light_frames.size(), width, height);
+
+    // Inicializar matriz para contener el mosaico Bayer apilado final
+    cv::Mat stacked_bayer(height, width, CV_16UC1);
+
+    // Ejecutar ParallelSigmaClipping usando cv::parallel_for_
+    ParallelSigmaClipping parallel_clipping(width, height, StackerSession::g_aligned_light_frames, stacked_bayer);
+    cv::parallel_for_(cv::Range(0, height), parallel_clipping);
+
+    // Aplicar debayerizado a stacked_bayer (BGR 16 bits)
+    cv::Mat stacked_bgr;
+    try {
+        cv::cvtColor(stacked_bayer, stacked_bgr, cv::COLOR_BayerBG2BGR);
+    } catch (const cv::Exception& e) {
+        LOGE("Error de OpenCV durante el debayerizado: %s", e.what());
+        return JNI_FALSE;
+    }
+
+    // Balance de Blancos Automatico (AWB) Gray World rapido
+    cv::Scalar avg_val = cv::mean(stacked_bgr);
+    double avg_b = avg_val[0];
+    double avg_g = avg_val[1];
+    double avg_r = avg_val[2];
+
+    double gain_r = 1.0;
+    double gain_b = 1.0;
+
+    if (avg_r > 0.0) gain_r = avg_g / avg_r;
+    if (avg_b > 0.0) gain_b = avg_g / avg_b;
+
+    // Limitar ganancias por estabilidad
+    gain_r = std::max(0.5, std::min(2.5, gain_r));
+    gain_b = std::max(0.5, std::min(2.5, gain_b));
+
+    LOGI("Ganancias de AWB aplicadas - R: %.4f, B: %.4f", gain_r, gain_b);
+
+    // Aplicar ganancias de forma eficiente en los canales correspondientes
+    std::vector<cv::Mat> channels;
+    cv::split(stacked_bgr, channels);
+    channels[0].convertTo(channels[0], CV_16U, gain_b); // Canal Blue
+    channels[2].convertTo(channels[2], CV_16U, gain_r); // Canal Red
+    cv::merge(channels, stacked_bgr);
+
+    // Precalcular tabla de busqueda (LUT) para el estiramiento tonal MTF
+    uint8_t mtf_lut[65536];
+    const double m = 0.02;
+    const double m_minus_1 = m - 1.0;
+    const double double_m_minus_1 = 2.0 * m - 1.0;
+
+    for (int i = 0; i < 65536; ++i) {
+        double x = i / 65535.0;
+        double denominator = (double_m_minus_1 * x) - m;
+        double mtf_val = 0.0;
+        if (std::abs(denominator) > 1e-6) {
+            mtf_val = (m_minus_1 * x) / denominator;
+        }
+        mtf_val = std::max(0.0, std::min(1.0, mtf_val));
+        mtf_lut[i] = static_cast<uint8_t>(std::round(mtf_val * 255.0));
+    }
+
+    // Aplicar LUT en paralelo para estiramiento MTF y conversion a 8 bits
+    cv::Mat stacked_bgr8(height, width, CV_8UC3);
+    ParallelLUTApply lut_apply(stacked_bgr, stacked_bgr8, mtf_lut);
+    cv::parallel_for_(cv::Range(0, height), lut_apply);
+
+    // Convertir BGR de 8 bits a RGBA de 8 bits
+    cv::Mat stacked_rgba8;
+    cv::cvtColor(stacked_bgr8, stacked_rgba8, cv::COLOR_BGR2RGBA);
+
+    // Obtener buffer de destino direct byte buffer y validar capacidad
+    void* raw_dst = env->GetDirectBufferAddress(outBuffer);
+    if (!raw_dst) {
+        LOGE("Error: No se pudo obtener la direccion del buffer directo de salida.");
+        return JNI_FALSE;
+    }
+
+    jlong capacity = env->GetDirectBufferCapacity(outBuffer);
+    size_t required_bytes = static_cast<size_t>(width) * height * 4;
+
+    if (static_cast<size_t>(capacity) < required_bytes) {
+        LOGE("Error: Capacidad del buffer de salida (%ld) es menor al requerido (%zu bytes).",
+             capacity, required_bytes);
+        return JNI_FALSE;
+    }
+
+    // Copiar matriz RGBA resultante al buffer de salida
+    std::memcpy(raw_dst, stacked_rgba8.data, required_bytes);
+
+    // Liberar memoria acumulada y resetear variables de estado
+    StackerSession::g_aligned_light_frames.clear();
+    StackerSession::g_reference_stars.clear();
+    StackerSession::g_is_reference_set = false;
+
+    LOGI("Proceso de apilamiento finalizado con exito.");
     return JNI_TRUE;
 }
 
