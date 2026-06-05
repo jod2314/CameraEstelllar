@@ -6,11 +6,11 @@ project("stelllar_native_stacker")
 include(FetchContent)
 
 # Proporcionar la URL a opencv-mobile precompilado para Android
-# Se utiliza la versión 20241014 que es compatible y estable.
+# Se utiliza la versión v30 (OpenCV 4.10.0) que es compatible y estable.
 # Se añade TLS_VERIFY OFF para evitar fallos de certificados SSL en entornos restringidos.
 FetchContent_Declare(
     opencv_mobile
-    URL "https://github.com/nihui/opencv-mobile/releases/download/20241014/opencv-mobile-4.10.0-android.zip"
+    URL "https://github.com/nihui/opencv-mobile/releases/download/v30/opencv-mobile-4.10.0-android.zip"
     TLS_VERIFY FALSE
 )
 FetchContent_MakeAvailable(opencv_mobile)
@@ -27,19 +27,22 @@ add_library(
     native_stacker.cpp
 )
 
+# Desactivar RTTI y excepciones para alinearse con la compilación optimizada de opencv-mobile
+target_compile_options(
+    stelllar_native_stacker
+    PRIVATE
+    -fno-rtti
+    -fno-exceptions
+)
+
 # --- 3. Find System Libraries ---
 find_library(log-lib log)
 find_library(android-lib android)
-
-# En Android 26+, AHardwareBuffer está en libandroid, pero a veces necesita link explícito.
-# También necesitamos Vulkan.
-find_library(vulkan-lib vulkan)
 
 # --- 4. Target Linking ---
 target_link_libraries(
     stelllar_native_stacker
     ${log-lib}
     ${android-lib}
-    ${vulkan-lib}
     ${OpenCV_LIBS}
 )

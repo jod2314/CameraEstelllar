@@ -4,7 +4,6 @@
 #include <android/hardware_buffer_jni.h>
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
-#include <opencv2/calib3d.hpp>
 #include <vector>
 #include <memory>
 #include <mutex>
@@ -292,6 +291,55 @@ namespace {
             }
         }
     };
+
+    // Estima la transformacion rigida (rotacion y traslacion) entre dos conjuntos de puntos correspondientes.
+    // Retorna una matriz afin de 2x3 de tipo CV_64FC1.
+    cv::Mat estimateRigidTransform2D(const std::vector<cv::Point2f>& src, const std::vector<cv::Point2f>& dst) {
+        int n = static_cast<int>(src.size());
+        if (n < 2) {
+            return cv::Mat(); // Se necesitan al menos 2 puntos
+        }
+
+        // 1. Calcular los centroides de ambos conjuntos de puntos
+        double src_cx = 0.0, src_cy = 0.0;
+        double dst_cx = 0.0, dst_cy = 0.0;
+        for (int i = 0; i < n; ++i) {
+            src_cx += src[i].x;
+            src_cy += src[i].y;
+            dst_cx += dst[i].x;
+            dst_cy += dst[i].y;
+        }
+        src_cx /= n;
+        src_cy /= n;
+        dst_cx /= n;
+        dst_cy /= n;
+
+        // 2. Calcular los componentes para estimar el angulo de rotacion theta optimo
+        double num = 0.0;
+        double den = 0.0;
+        for (int i = 0; i < n; ++i) {
+            double src_x = src[i].x - src_cx;
+            double src_y = src[i].y - src_cy;
+            double dst_x = dst[i].x - dst_cx;
+            double dst_y = dst[i].y - dst_cy;
+
+            num += (src_x * dst_y - src_y * dst_x);
+            den += (src_x * dst_x + src_y * dst_y);
+        }
+
+        double theta = std::atan2(num, den);
+        double cos_theta = std::cos(theta);
+        double sin_theta = std::sin(theta);
+
+        // 3. Calcular la traslacion t = dst_c - R * src_c
+        double tx = dst_cx - (cos_theta * src_cx - sin_theta * src_cy);
+        double ty = dst_cy - (sin_theta * src_cx + cos_theta * src_cy);
+
+        // Retornar la matriz afin de 2x3 de tipo CV_64FC1
+        cv::Mat M = (cv::Mat_<double>(2, 3) << cos_theta, -sin_theta, tx,
+                                               sin_theta,  cos_theta, ty);
+        return M;
+    }
 }
 
 extern "C"
@@ -346,12 +394,12 @@ Java_com_stelllar_camera_domain_stacking_NativeStacker_addDarkFrame(
     size_t required_bytes = num_pixels * sizeof(uint16_t);
 
     if (static_cast<size_t>(capacity) < required_bytes) {
-        LOGE("Error: La capacidad del buffer (%ld bytes) es insuficiente para %zu pixeles (%zu bytes)", 
-             capacity, num_pixels, required_bytes);
+        LOGE("Error: La capacidad del buffer (%lld bytes) es insuficiente para %zu pixeles (%zu bytes)", 
+             static_cast<long long>(capacity), num_pixels, required_bytes);
         return JNI_FALSE;
     }
 
-    LOGI("Añadiendo Dark Frame nativo. Stride: %d, Capacidad: %ld", rowStride, capacity);
+    LOGI("Añadiendo Dark Frame nativo. Stride: %d, Capacidad: %lld", rowStride, static_cast<long long>(capacity));
 
     // Validar alineación del buffer de datos a 2 bytes (uint16_t)
     uint16_t* data = nullptr;
@@ -437,8 +485,8 @@ Java_com_stelllar_camera_domain_stacking_NativeStacker_processLightFrame(
     size_t required_bytes = num_pixels * sizeof(uint16_t);
 
     if (static_cast<size_t>(capacity) < required_bytes) {
-        LOGE("Error: Capacidad del buffer del Light Frame (%ld) es insuficiente para %zu pixeles (%zu bytes)", 
-             capacity, num_pixels, required_bytes);
+        LOGE("Error: Capacidad del buffer del Light Frame (%lld) es insuficiente para %zu pixeles (%zu bytes)", 
+             static_cast<long long>(capacity), num_pixels, required_bytes);
         return JNI_FALSE;
     }
 
@@ -526,13 +574,47 @@ Java_com_stelllar_camera_domain_stacking_NativeStacker_processLightFrame(
 
         bool alignment_success = false;
 
-        // Se requiere un minimo de 4 correspondencias para estimar la transformacion afin parcial con RANSAC
+        // Se requiere un minimo de 4 correspondencias para filtrar outliers y estimar la transformacion afin
         if (matched_curr.size() >= 4) {
-            cv::Mat inliers;
-            cv::Mat affine_matrix = cv::estimateAffinePartial2D(matched_curr, matched_ref, inliers, cv::RANSAC, 3.0);
+            // 1. Filtrar outliers usando consistencia de traslacion
+            int n_pairs = static_cast<int>(matched_curr.size());
+            std::vector<double> dxs(n_pairs);
+            std::vector<double> dys(n_pairs);
+            for (int i = 0; i < n_pairs; ++i) {
+                dxs[i] = matched_ref[i].x - matched_curr[i].x;
+                dys[i] = matched_ref[i].y - matched_curr[i].y;
+            }
 
-            if (!affine_matrix.empty()) {
-                alignment_success = true;
+            // Encontrar la mediana de las traslaciones dx y dy
+            std::vector<double> temp_dxs = dxs;
+            std::vector<double> temp_dys = dys;
+            std::nth_element(temp_dxs.begin(), temp_dxs.begin() + n_pairs / 2, temp_dxs.end());
+            std::nth_element(temp_dys.begin(), temp_dys.begin() + n_pairs / 2, temp_dys.end());
+            double median_dx = temp_dxs[n_pairs / 2];
+            double median_dy = temp_dys[n_pairs / 2];
+
+            // Filtrar parejas con diferencias mayores a 5.0 pixeles
+            std::vector<cv::Point2f> inliers_curr;
+            std::vector<cv::Point2f> inliers_ref;
+            const double threshold_dist = 5.0;
+            for (int i = 0; i < n_pairs; ++i) {
+                double diff_x = dxs[i] - median_dx;
+                double diff_y = dys[i] - median_dy;
+                double dist_err = std::sqrt(diff_x * diff_x + diff_y * diff_y);
+                if (dist_err <= threshold_dist) {
+                    inliers_curr.push_back(matched_curr[i]);
+                    inliers_ref.push_back(matched_ref[i]);
+                }
+            }
+
+            LOGI("Filtro de outliers finalizado: %zu inliers de %zu parejas originales.", inliers_curr.size(), matched_curr.size());
+
+            // Estimar la transformacion rigida si tenemos al menos 3 inliers
+            if (inliers_curr.size() >= 3) {
+                cv::Mat affine_matrix = estimateRigidTransform2D(inliers_curr, inliers_ref);
+
+                if (!affine_matrix.empty()) {
+                    alignment_success = true;
 
                 // Separar el frame calibrado de 16 bits en 4 canales monocromos (R, Gr, Gb, B) de W/2 x H/2
                 int half_width = StackerSession::g_width / 2;
@@ -594,6 +676,7 @@ Java_com_stelllar_camera_domain_stacking_NativeStacker_processLightFrame(
                 LOGI("Frame alineado y acumulado correctamente en memoria nativa.");
             }
         }
+    }
 
         // Si falla la estimacion RANSAC o no hay estrellas suficientes, guardar sin alinear como fallback
         if (!alignment_success) {
@@ -641,12 +724,7 @@ Java_com_stelllar_camera_domain_stacking_NativeStacker_finalizeStacking(
 
     // Aplicar debayerizado a stacked_bayer (BGR 16 bits)
     cv::Mat stacked_bgr;
-    try {
-        cv::cvtColor(stacked_bayer, stacked_bgr, cv::COLOR_BayerBG2BGR);
-    } catch (const cv::Exception& e) {
-        LOGE("Error de OpenCV durante el debayerizado: %s", e.what());
-        return JNI_FALSE;
-    }
+    cv::cvtColor(stacked_bayer, stacked_bgr, cv::COLOR_BayerBG2BGR);
 
     // Balance de Blancos Automatico (AWB) Gray World rapido
     cv::Scalar avg_val = cv::mean(stacked_bgr);
@@ -710,8 +788,8 @@ Java_com_stelllar_camera_domain_stacking_NativeStacker_finalizeStacking(
     size_t required_bytes = static_cast<size_t>(width) * height * 4;
 
     if (static_cast<size_t>(capacity) < required_bytes) {
-        LOGE("Error: Capacidad del buffer de salida (%ld) es menor al requerido (%zu bytes).",
-             capacity, required_bytes);
+        LOGE("Error: Capacidad del buffer de salida (%lld) es menor al requerido (%zu bytes).",
+             static_cast<long long>(capacity), required_bytes);
         return JNI_FALSE;
     }
 
