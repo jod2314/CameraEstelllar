@@ -10,8 +10,13 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
 - **Catálogo de Agentes:** Archivo [.agents/AGENT_CATALOG.md](file:///c:/camerastelllarv3/.agents/AGENT_CATALOG.md) definiendo los roles de `android_architect`, `camera2_expert`, `ndk_expert` y `code_reviewer`.
 - **Script de Validación Local:** Script [.agents/scripts/run_tests.ps1](file:///c:/camerastelllarv3/.agents/scripts/run_tests.ps1) en PowerShell para automatizar unit tests y análisis estático con Gradle.
 - **Compatibilidad de Diseño Portrait:** Archivo por defecto [layout/fragment_camera.xml](file:///c:/camerastelllarv3/app/src/main/res/layout/fragment_camera.xml) para evitar errores del compilador Lint de Android y crasheos en modo vertical.
+- **Plan Estructurado de Stacking:** Creación de [PLAN_ESTRUCTURADO_STACKING.md](file:///c:/camerastelllarv3/docs/PLAN_ESTRUCTURADO_STACKING.md) detallando el pipeline matemático y la hoja de ruta de desarrollo nativo.
 
 ### Corregido
 - **Error de Jetpack Compose:** Corrección de `RowArrangement.SpaceEvenly` por `Arrangement.SpaceEvenly` en [CameraScreen.kt](file:///c:/camerastelllarv3/app/src/main/java/com/stelllar/camera/presentation/compose/CameraScreen.kt).
 - **Pruebas Unitarias Fuera de Lugar:** Se reubicó el archivo [InstrumentedTests.kt](file:///C:/camerastelllarv3/app/src/androidTest/java/com/stelllar/camera/InstrumentedTests.kt) al directorio de pruebas de instrumentación correcto (`src/androidTest/java`) y se actualizaron sus dependencias y assertions obsoletas.
 - **Advertencias de API en SensorProber:** Se añadió `@SuppressLint("NewApi")` en [SensorProber.kt](file:///c:/camerastelllarv3/app/src/main/java/com/stelllar/camera/data/camera/SensorProber.kt) para silenciar las advertencias de compilación de la clase `OutputConfiguration` en la API 24 ( Nougat) bajo minSdkVersion 21.
+- **Optimización de Memoria en CameraController:** Reducción de la capacidad del buffer de ImageReader a 3 y conversión del canal de corrutinas a capacidad 3 con vaciado síncrono mediante `tryReceive()` para evitar crasheos por OutOfMemory (OOM).
+- **Prevención de Leaks de Hardware:** Cierre preventivo de sesiones anteriores en `initializeCamera`, suspensión cancelable en `createCaptureSession` y bloque de cancelación/fallo robusto en `captureImage` para liberar síncronamente buffers nativos.
+- **Eliminación de Antipatrón de Suspensión:** Conversión de `saveResult` a función síncrona pura corriendo sobre `Dispatchers.IO` para evitar envolver E/S bloqueante en `suspendCoroutine`.
+
