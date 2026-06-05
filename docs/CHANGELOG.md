@@ -18,6 +18,13 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Emparejamiento de asterismos estelares por vecino más cercano y estimación robusta RANSAC de la matriz afín rígida (`cv::estimateAffinePartial2D`).
   - Separación en 4 canales de color monocromos (R, Gr, Gb, B) y distorsión bicúbica independiente (`cv::warpAffine` con `cv::INTER_CUBIC`) de cada canal para evitar solapamiento de color.
   - Recomposición e intercalado del mosaico Bayer en 16 bits para guardar los frames alineados resultantes en un vector de memoria nativa.
+- **Fase 4 - Sigma Clipping, Debayer y Exportación:** Implementación nativa en [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp) de:
+  - Algoritmo de rechazo robusto de outliers mediante Sigma Clipping paralelizado (`ParallelSigmaClipping` heredando de `cv::ParallelLoopBody`) utilizando mediana y MAD con rango de $2.5 \times MAD$ y piso mínimo de $10.0$ ADU.
+  - Debayer de 16 bits a BGR (`CV_16UC3`) con `cv::COLOR_BayerBG2BGR` mediante OpenCV.
+  - Balance de Blancos Automático (AWB) rápido de tipo "Gray World" escalando y recortando de forma eficiente mediante la función `convertTo`.
+  - Estiramiento Tonal Midtone Transfer Function (MTF) para astrofotografía ($m \approx 0.02$) optimizado mediante una tabla de búsqueda (LUT) global precargada de 65536 entradas y ejecutada en paralelo con `ParallelLUTApply`.
+  - Exportación directa a Kotlin de la matriz RGBA resultante de 8 bits validando la capacidad del buffer de salida y liberando preventivamente todos los frames alineados acumulados en memoria nativa.
+
 
 
 ## [Desbloqueado] - 2026-06-04

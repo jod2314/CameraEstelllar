@@ -31,6 +31,14 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
     *   **Alineación por Canal y Recomposición:** Se extraen los 4 canales de color del mosaico Bayer original, se aplica `cv::warpAffine` de forma individual a cada uno usando interpolación bicúbica (`cv::INTER_CUBIC`) para no mezclar canales cromáticos, y se vuelven a intercalar en el mosaico original de 16 bits.
     *   **Acumulador Nativo:** Los frames resultantes calibrados y alineados se almacenan de manera eficiente en memoria nativa (`g_aligned_light_frames`).
 
+### 5. Sigma Clipping, Debayer y Exportación (Fase 4)
+*   **native_stacker.cpp:**
+    *   **Sigma Clipping Paralelizado (MAD):** Implementación de la clase `ParallelSigmaClipping` que hereda de `cv::ParallelLoopBody`. Ejecuta en paralelo (por filas mediante `cv::parallel_for_`) el rechazo de outliers estadísticos mediante Sigma-Clipping basado en Mediana y MAD ($2.5 \times MAD$ o un piso de $10.0$ para ruido térmico), promediando los píxeles válidos para cada canal. En ráfagas muy cortas ($N < 3$), realiza un promedio simple para optimizar tiempos.
+    *   **Debayer de 16 bits:** Conversión del buffer Bayer lineal resultante a formato de color BGR de 16 bits (`CV_16UC3`) mediante `cv::cvtColor` con `cv::COLOR_BayerBG2BGR`.
+    *   **Balance de Blancos Automático (AWB):** Algoritmo rápido tipo "Gray World" que estima promedios globales por canal y escala de forma eficiente las ganancias de R y B respecto al canal G (acotadas en el rango $[0.5, 2.5]$ para evitar inestabilidades) a través de `convertTo`.
+    *   **Estiramiento Tonal MTF con LUT:** Aplicación paralela de la curva de transferencia no lineal MTF (con parámetro de sombras medias $m \approx 0.02$) mapeada de forma ultrarrápida mediante una tabla de búsqueda (LUT) de 65536 entradas de 16 bits a 8 bits, resultando en una imagen BGR de 8 bits (`CV_8UC3`).
+    *   **Exportación Directa a Kotlin:** Conversión a RGBA de 8 bits (`CV_8UC4`) y volcado de memoria directo mediante `std::memcpy` al buffer de salida `outBuffer` (`DirectByteBuffer`) validando la capacidad del buffer previamente para prevenir desbordamientos de memoria. Liberación síncrona automática de los buffers acumulados en la sesión.
+
 ## Auditoría y Pruebas
 
 ### Fase 1 (Kotlin)
@@ -44,3 +52,8 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 ### Fase 3 (C++)
 *   **Code Review:** El subagente **Native Code Auditor** revisó los algoritmos implementados con OpenCV y NDK en [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp), verificando la protección de accesos concurrentes, el cálculo preciso de centroides, el control de fugas de memoria y el estilo de comentarios, otorgando su aprobación (**APROBADO**).
 *   **Gradle Build, Tests & Lint:** Se ejecutó el script `.agents/scripts/run_tests.ps1` en PowerShell. CMake compiló exitosamente el proyecto enlazando dinámicamente OpenCV y todas las validaciones de Lint de Android se completaron sin incidencias.
+
+### Fase 4 (C++)
+*   **Code Review:** Autorevisión exhaustiva siguiendo los lineamientos del **Code Review Agent (Android Edition)**. Se confirmó la prevención de leaks de memoria nativa, la validación estricta de capacidades de buffers directos, la correcta sincronización de hilos y la documentación de comentarios estrictamente en español.
+*   **Gradle Build, Tests & Lint:** Se ejecutó con éxito el script `.agents/scripts/run_tests.ps1` que comprobó la compilación de CMake y Android NDK con OpenCV, ejecutó las tareas de pruebas de Gradle y aprobó sin incidencias el análisis estático de Android Lint.
+
