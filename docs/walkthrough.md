@@ -23,6 +23,14 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
     *   **Sustracción de Dark con Pedestal:** Implementación en `processLightFrame` restando el Master Dark píxel a píxel sobre el mosaico Bayer, sumando un pedestal de 100 ADU para preservar valores de ruido negativos frente al recorte a cero absoluto.
     *   **Mitigación de Errores de Alineación en JNI:** Se incorporó en C++ una validación dinámica de la dirección de memoria de los búferes directos (2 bytes de alineación). En caso de desalineación, se realiza un copiado temporal con `std::memcpy` antes del procesamiento, lo que previene fallos de bus (SIGBUS) en procesadores ARM.
 
+### 4. Detección, Alineación RANSAC y Stacking en C++ (Fase 3)
+*   **native_stacker.cpp:**
+    *   **Plano L (Super-Píxel):** Implementación de `createSuperPixelLPlane` para reducir a la mitad la resolución de la toma Bayer de 16 bits y obtener un plano L monocromo simplificado promediando bloques 2x2.
+    *   **Detección con Precisión Subpíxel:** Implementación de `detectStarsAndCentroids` que calcula de manera eficiente la mediana y desviación estándar global de la imagen y utiliza un umbral adaptativo para hallar máximos locales, refinándolos a coordenadas subpíxel mediante momentos geométricos de primer orden en una ventana de 5x5.
+    *   **Alineación RANSAC:** En `processLightFrame`, si ya se ha fijado un frame de referencia, se realiza un emparejamiento de vecino más cercano por distancia euclidiana y se estima la matriz afín rígida $2 \times 3$ con `cv::estimateAffinePartial2D` filtrado mediante el algoritmo robusto RANSAC.
+    *   **Alineación por Canal y Recomposición:** Se extraen los 4 canales de color del mosaico Bayer original, se aplica `cv::warpAffine` de forma individual a cada uno usando interpolación bicúbica (`cv::INTER_CUBIC`) para no mezclar canales cromáticos, y se vuelven a intercalar en el mosaico original de 16 bits.
+    *   **Acumulador Nativo:** Los frames resultantes calibrados y alineados se almacenan de manera eficiente en memoria nativa (`g_aligned_light_frames`).
+
 ## Auditoría y Pruebas
 
 ### Fase 1 (Kotlin)
@@ -30,6 +38,9 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 *   **Pruebas & Lint:** Verificados con éxito a nivel local.
 
 ### Fase 2 (C++)
-*   **Code Review:** El subagente **Native Code Auditor** revisó [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp), verificando la seguridad en el manejo de memoria JNI, la prevención de fugas y desbordamientos, y el cumplimiento estricto de comentarios en español, otorgando su aprobación (**APROBADO**).
-*   **Gradle Build, Tests & Lint:** Se ejecutó el script de verificación local `.agents/scripts/run_tests.ps1` bajo PowerShell. Compiló exitosamente el módulo nativo mediante CMake (sin discrepancias de enlazado JNI) y todas las tareas de Gradle, pruebas unitarias y el análisis de Lint Debug pasaron al 100% sin advertencias ni errores bloqueantes.
+*   **Code Review:** El subagente **Native Code Auditor** revisó [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp) y otorgó su aprobación (**APROBADO**).
+*   **Gradle Build, Tests & Lint:** Compiló exitosamente el módulo nativo bajo CMake y todas las tareas pasaron de forma limpia.
 
+### Fase 3 (C++)
+*   **Code Review:** El subagente **Native Code Auditor** revisó los algoritmos implementados con OpenCV y NDK en [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp), verificando la protección de accesos concurrentes, el cálculo preciso de centroides, el control de fugas de memoria y el estilo de comentarios, otorgando su aprobación (**APROBADO**).
+*   **Gradle Build, Tests & Lint:** Se ejecutó el script `.agents/scripts/run_tests.ps1` en PowerShell. CMake compiló exitosamente el proyecto enlazando dinámicamente OpenCV y todas las validaciones de Lint de Android se completaron sin incidencias.

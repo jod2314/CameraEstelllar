@@ -11,6 +11,14 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Sustracción calibrada de darks (Dark Frame Subtraction) en espacio de color lineal (RAW Bayer CFA) sin demosaico.
   - Aplicación de un pedestal de 100 ADU en la sustracción para evitar recortes arbitrarios a cero del ruido de lectura.
   - Validación dinámica de alineación a 2 bytes para punteros directos de JNI con fallback seguro mediante `std::memcpy` para mitigar fallos de bus en arquitecturas ARM.
+- **Fase 3 - Detección, Alineación RANSAC y Stacking en C++:** Implementación en [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp) de:
+  - Reducción de resolución a la mitad para obtener el Plano L (Luminancia) monocromo promediando bloques 2x2 (Super-Pixel).
+  - Algoritmo de detección de fuentes estelares brillantes con estimación de mediana de fondo del cielo y umbral adaptativo.
+  - Estimación de centroides con precisión subpíxel aplicando momentos de primer orden sobre una ventana local de 5x5.
+  - Emparejamiento de asterismos estelares por vecino más cercano y estimación robusta RANSAC de la matriz afín rígida (`cv::estimateAffinePartial2D`).
+  - Separación en 4 canales de color monocromos (R, Gr, Gb, B) y distorsión bicúbica independiente (`cv::warpAffine` con `cv::INTER_CUBIC`) de cada canal para evitar solapamiento de color.
+  - Recomposición e intercalado del mosaico Bayer en 16 bits para guardar los frames alineados resultantes en un vector de memoria nativa.
+
 
 ## [Desbloqueado] - 2026-06-04
 
