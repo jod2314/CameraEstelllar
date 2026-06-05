@@ -7,6 +7,7 @@ import com.stelllar.camera.domain.CameraParameters
 import com.stelllar.camera.domain.CameraState
 import com.stelllar.camera.domain.repository.CameraRepository
 import com.stelllar.camera.domain.repository.PhotoResult
+import com.stelllar.camera.domain.repository.SettingsRepository
 import com.stelllar.camera.domain.usecase.CapturePhotoUseCase
 import com.stelllar.camera.domain.usecase.ProbeSensorUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -21,7 +22,8 @@ import javax.inject.Inject
 class CameraViewModel @Inject constructor(
     private val cameraRepository: CameraRepository,
     private val capturePhotoUseCase: CapturePhotoUseCase,
-    private val probeSensorUseCase: ProbeSensorUseCase
+    private val probeSensorUseCase: ProbeSensorUseCase,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<CameraState>(CameraState.Idle)
@@ -89,6 +91,14 @@ class CameraViewModel @Inject constructor(
                 _uiState.value = CameraState.Error("Error durante el sondeo del sensor", e)
             }
         }
+    }
+
+    fun saveMaxExposureNs(cameraId: String, exposureNs: Long) {
+        settingsRepository.saveMaxExposureNs(cameraId, exposureNs)
+    }
+
+    fun getMaxExposureNs(cameraId: String): Long {
+        return settingsRepository.getMaxExposureNs(cameraId)
     }
 
     fun closeCamera() {

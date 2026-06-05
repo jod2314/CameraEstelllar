@@ -44,9 +44,8 @@ fun CameraScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
     
-    // Configuración de Exposición guardada
-    val prefs = remember { context.getSharedPreferences("camera_test", Context.MODE_PRIVATE) }
-    var savedMax by remember { mutableStateOf(prefs.getLong("max_exposure_ns_$cameraId", 0L)) }
+    // Configuración de Exposición guardada obtenida del ViewModel (Capa de negocio/datos)
+    var savedMax by remember(cameraId) { mutableStateOf(viewModel.getMaxExposureNs(cameraId)) }
     
     // Rangos del hardware
     val isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: android.util.Range(100, 3200)
@@ -54,10 +53,10 @@ fun CameraScreen(
     val effectiveMaxExposure = if (savedMax > 0) savedMax else theoreticalMaxExp
 
     // Estados de los controles manuales
-    var currentIso by remember { mutableStateOf(isoRange.lower.toFloat()) }
-    var currentExposure by remember { mutableStateOf(effectiveMaxExposure.toFloat()) }
-    var currentBurst by remember { mutableIntStateOf(1) }
-    var currentTimer by remember { mutableIntStateOf(0) }
+    var currentIso by remember(cameraId) { mutableStateOf(isoRange.lower.toFloat()) }
+    var currentExposure by remember(cameraId) { mutableStateOf(effectiveMaxExposure.toFloat()) }
+    var currentBurst by remember(cameraId) { mutableIntStateOf(1) }
+    var currentTimer by remember(cameraId) { mutableIntStateOf(0) }
 
     // Sincronizar cambios con el ViewModel
     LaunchedEffect(currentIso, currentExposure, currentBurst, currentTimer) {
@@ -71,10 +70,10 @@ fun CameraScreen(
         )
     }
 
-    // Efecto para cargar el valor guardado en el ViewModel al inicio
-    LaunchedEffect(savedMax) {
-        if (savedMax > 0) {
-            currentExposure = savedMax.toFloat()
+    // Liberar la cámara de forma segura al desmontar o cambiar de sensor
+    DisposableEffect(cameraId) {
+        onDispose {
+            viewModel.closeCamera()
         }
     }
 
@@ -211,22 +210,27 @@ fun CameraScreen(
                 onClick = {
                     isTesting = true
                     viewModel.closeCamera()
-                    scope.launch(Dispatchers.IO) {
+                    scope.launch {
                         try {
-                            delay(2000)
+                            // Esperar a que la cámara libere los recursos nativos antes del sondeo
+                            delay(1000)
                             viewModel.runSensorProbe(cameraId, physicalCameraId) { maxNs ->
-                                scope.launch(Dispatchers.Main) {
-                                    if (maxNs > 0) {
-                                        savedMax = maxNs
-                                        prefs.edit().putLong("max_exposure_ns_$cameraId", maxNs).apply()
-                                        currentExposure = maxNs.toFloat()
-                                        onShowToast("Bypass Exitoso: ${maxNs / 1e9}s")
-                                    } else {
-                                        onShowToast("Bypass no soportado")
-                                    }
-                                    isTesting = false
-                                    surfaceProvider?.surface?.let { surface ->
-                                        viewModel.initializeCamera(cameraId, physicalCameraId, pixelFormat, surface, orientation)
+                                if (maxNs > 0) {
+                                    savedMax = maxNs
+                                    viewModel.saveMaxExposureNs(cameraId, maxNs)
+                                    currentExposure = maxNs.toFloat()
+                                    onShowToast("Bypass Exitoso: ${maxNs / 1e9}s")
+                                } else {
+                                    onShowToast("Bypass no soportado")
+                                }
+                                isTesting = false
+                                surfaceProvider?.surface?.let { surface ->
+                                    scope.launch {
+                                        try {
+                                            viewModel.initializeCamera(cameraId, physicalCameraId, pixelFormat, surface, orientation)
+                                        } catch (e: Exception) {
+                                            onShowToast("Error al abrir cámara: ${e.message}")
+                                        }
                                     }
                                 }
                             }
