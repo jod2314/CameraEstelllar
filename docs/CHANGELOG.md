@@ -24,6 +24,13 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Balance de Blancos Automático (AWB) rápido de tipo "Gray World" escalando y recortando de forma eficiente mediante la función `convertTo`.
   - Estiramiento Tonal Midtone Transfer Function (MTF) para astrofotografía ($m \approx 0.02$) optimizado mediante una tabla de búsqueda (LUT) global precargada de 65536 entradas y ejecutada en paralelo con `ParallelLUTApply`.
   - Exportación directa a Kotlin de la matriz RGBA resultante de 8 bits validando la capacidad del buffer de salida y liberando preventivamente todos los frames alineados acumulados en memoria nativa.
+- **Fase 5 - Cierre de XML y Modernización Completa de UI:** Modernización arquitectónica de la interfaz de usuario en Compose puro y Compose Navigation:
+  - Migración de [CameraActivity.kt](file:///c:/camerastelllarv3/app/src/main/java/com/stelllar/camera/CameraActivity.kt) a Compose mediante `setContent` con un `NavHost` central para la navegación declarativa del flujo.
+  - Implementación de [PermissionsScreen.kt](file:///c:/camerastelllarv3/app/src/main/java/com/stelllar/camera/presentation/compose/PermissionsScreen.kt) en Compose con lógica asíncrona de solicitud y tema oscuro estelar.
+  - Creación de [ImageViewerScreen.kt](file:///c:/camerastelllarv3/app/src/main/java/com/stelllar/camera/presentation/compose/ImageViewerScreen.kt) en Compose usando Glide de forma asíncrona y liberando de forma segura los recursos nativos en `onRelease` de `AndroidView`.
+  - Remoción de ViewBinding y SafeArgs en [build.gradle (app)](file:///c:/camerastelllarv3/app/build.gradle) y dependencias gradle asociadas.
+  - Purgado de layouts XML obsoletos (`activity_camera.xml`, `fragment_camera.xml` en retrato y landscape) y del grafo de navegación `nav_graph.xml`.
+
 
 
 

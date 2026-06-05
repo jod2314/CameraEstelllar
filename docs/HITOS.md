@@ -9,6 +9,7 @@ Este documento registra los hitos alcanzados en el proyecto, junto con sus respe
 | 2026-06-05 | Fase 2 - Calibración e Ingesta JNI en C++ | `self` (Orquestador) | `native_stacker.cpp` | `f284f469bc57be07c2ba5c08faf5df2b2e124d61` |
 | 2026-06-05 | Fase 3 - Detección, Alineación RANSAC y Stacking en C++ | `ndk_expert` | `native_stacker.cpp` | `f01baad225f41247b2e64539fddc6b900c73dcb6` |
 | 2026-06-05 | Fase 4 - Sigma Clipping, Debayer y Exportación | `ndk_expert` | `native_stacker.cpp` | `187e3dc31befbba7f63d0ac3cbcff3a839aab32b` |
+| 2026-06-05 | Fase 5 - Cierre de XML y Modernización Completa de UI | `self` (Orquestador) | `CameraActivity.kt`, `app/build.gradle`, `build.gradle`, `PermissionsScreen.kt`, `ImageViewerScreen.kt` | `e58d323a9c2b21e3a49d9697f18b0f997880fa6a` |
 
 
 
