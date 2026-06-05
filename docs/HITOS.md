@@ -12,6 +12,8 @@ Este documento registra los hitos alcanzados en el proyecto, junto con sus respe
 | 2026-06-05 | Fase 5 - Cierre de XML y Modernización Completa de UI | `self` (Orquestador) | `CameraActivity.kt`, `app/build.gradle`, `build.gradle`, `PermissionsScreen.kt`, `ImageViewerScreen.kt` | `e58d323a9c2b21e3a49d9697f18b0f997880fa6a` |
 | 2026-06-05 | Corrección de compilación NDK: descarga de opencv-mobile y remoción de dependencias (vulkan/calib3d) | `self` (Orquestador) | `CMakeLists.txt`, `native_stacker.cpp` | `66dee40a` |
 | 2026-06-05 | Corregir consistencia cruzada de test de bypass entre sensores e implementar persistencia MVVM | `self` (Orquestador) | `CameraScreen.kt`, `CameraViewModel.kt` | `a5342f5` |
+| 2026-06-05 | Aislar bypass por sensorId físico unívoco y corregir persistencia en Compose y casos de uso | `self` (Orquestador) | `CameraScreen.kt`, `GetCamerasUseCase.kt` | `e5cfc42` |
+
 
 
 

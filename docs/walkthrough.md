@@ -51,13 +51,16 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 
 ### 7. Corrección del Estado de Test de Bypass de Exposición (Sensores)
 *   **CameraScreen.kt:**
-    *   Se reemplazó el uso de `remember` genérico por `remember(cameraId)` en los estados `savedMax`, `currentIso`, `currentExposure`, `currentBurst` y `currentTimer` para forzar la reinicialización y aislamiento de datos por sensor al cambiar de cámara.
+    *   Se implementó la resolución de un identificador de sensor físico unívoco (`val sensorId = physicalCameraId ?: cameraId`) para aislar de forma absoluta a los lentes físicos (gran angular, macro, telefoto) que comparten una misma cámara lógica.
+    *   Se reemplazó el uso de `remember(cameraId)` por `remember(sensorId)` en los estados `savedMax`, `currentIso`, `currentExposure`, `currentBurst` y `currentTimer` para forzar la reinicialización de datos y evitar la consistencia cruzada.
     *   Se eliminó la lectura y escritura directa a `SharedPreferences` en la UI, delegando la persistencia de datos al ViewModel a través de `SettingsRepository`.
-    *   Se removieron llamadas de corrutinas redundantes y anidadas (`scope.launch(Dispatchers.IO)` y `scope.launch(Dispatchers.Main)`) en el flujo de ejecución del test.
-    *   Se añadió un `DisposableEffect(cameraId)` para garantizar la liberación de la cámara (`viewModel.closeCamera()`) al desmontar la pantalla de Compose o alternar de sensor, previniendo fugas de hardware.
+    *   Se removieron llamadas de corrutinas redundantes y anidadas en el botón de ejecución de test.
+    *   Se añadió un `DisposableEffect(sensorId)` para garantizar la liberación de recursos de la cámara (`viewModel.closeCamera()`) al cambiar de sensor o desmontar la pantalla de Compose, previniendo fugas de hardware.
+*   **GetCamerasUseCase.kt:**
+    *   Se modificó el caso de uso para consultar el bypass de exposición de cada sensor usando su identificador físico unívoco (`val targetId = physicalId ?: logicalId`), garantizando consistencia en el selector de lentes.
 *   **CameraViewModel.kt:**
-    *   Se inyectó `SettingsRepository` en el constructor del ViewModel.
-    *   Se expusieron las funciones `saveMaxExposureNs` y `getMaxExposureNs` en el ViewModel para servir como capa intermedia de persistencia para la UI.
+    *   Se inyectó `SettingsRepository` en el constructor del ViewModel y se expusieron métodos intermediarios de persistencia para la UI.
+
 
 ## Auditoría y Pruebas
 
@@ -82,5 +85,8 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 
 ### Corrección del Test de Bypass de Exposición (Sensores)
 *   **Code Review:** El subagente **Kotlin UI Code Auditor** auditó exhaustivamente la implementación en `CameraScreen.kt` y `CameraViewModel.kt` confirmando la prevención de leaks de la cámara mediante `DisposableEffect` y el aislamiento de persistencia en el ViewModel a través de `SettingsRepository`, otorgando su aprobación (**APROBADO**).
-*   **Gradle Build, Tests & Lint:** Compiló con éxito y pasó de forma limpia `run_tests.ps1` de punta a punta (pruebas unitarias y análisis estático Android Lint).
+*   **Aislamiento Dinámico:** Se validó que las configuraciones de exposición se guarden y carguen de manera independiente usando el ID de sensor físico unívoco (`val sensorId = physicalCameraId ?: cameraId`), resolviendo el problema de consistencia cruzada en lentes lógicos compartidos.
+*   **Caso de Uso:** Se garantizó que el caso de uso `GetCamerasUseCase` consulte la persistencia utilizando la misma correspondencia unívoca (`physicalId ?: logicalId`).
+*   **Gradle Build, Tests & Lint:** Compiló con éxito y pasó de forma limpia `run_tests.ps1` de punta a punta (pruebas unitarias y análisis estático Android Lint con compilación exitosa).
+
 
