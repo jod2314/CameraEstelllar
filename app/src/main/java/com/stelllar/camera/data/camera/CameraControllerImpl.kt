@@ -79,6 +79,16 @@ class CameraControllerImpl @Inject constructor(
     ): android.util.Size {
         initThreads()
         this.activePhysicalCameraId = physicalCameraId
+        
+        // Liberar recursos de hardware previos para evitar fugas si se re-inicializa sin cerrar
+        try {
+            if (::session.isInitialized) session.close()
+            if (::camera.isInitialized) camera.close()
+            if (::imageReader.isInitialized) imageReader.close()
+        } catch (e: Exception) {
+            Timber.w(e, "Error al limpiar recursos de hardware previos")
+        }
+
         characteristics = if (physicalCameraId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             cameraManager.getCameraCharacteristics(physicalCameraId)
         } else {
@@ -119,19 +129,20 @@ class CameraControllerImpl @Inject constructor(
         onCaptureStarted: () -> Unit,
         parameters: CameraParameters
     ): PhotoResult = withContext(Dispatchers.IO) {
+        var result: CombinedCaptureResult? = null
         try {
             // Iniciar servicio en primer plano para evitar que el SO cierre la app
             com.stelllar.camera.services.CameraForegroundService.start(context)
             
-            val result = captureImage(onCaptureStarted, parameters)
+            result = captureImage(onCaptureStarted, parameters)
             
             Timber.d("Result received: $result")
             val photoResult = saveResult(result)
             Timber.d("Image saved to MediaStore: ${photoResult.uriString}")
 
-            result.close()
             photoResult
         } finally {
+            result?.close()
             // Detener el servicio independientemente del resultado
             com.stelllar.camera.services.CameraForegroundService.stop(context)
         }
@@ -192,12 +203,14 @@ class CameraControllerImpl @Inject constructor(
         targets: List<Surface>,
         physicalCameraId: String?,
         handler: Handler? = null
-    ): CameraCaptureSession = suspendCoroutine { cont ->
+    ): CameraCaptureSession = suspendCancellableCoroutine { cont ->
         val stateCallback = object : CameraCaptureSession.StateCallback() {
-            override fun onConfigured(session: CameraCaptureSession) = cont.resume(session)
+            override fun onConfigured(session: CameraCaptureSession) {
+                if (cont.isActive) cont.resume(session)
+            }
             override fun onConfigureFailed(session: CameraCaptureSession) {
                 val exc = RuntimeException("Camera ${device.id} session configuration failed")
-                cont.resumeWithException(exc)
+                if (cont.isActive) cont.resumeWithException(exc)
             }
         }
 
@@ -256,11 +269,15 @@ class CameraControllerImpl @Inject constructor(
         @Suppress("ControlFlowWithEmptyBody")
         while (imageReader.acquireNextImage() != null) {}
 
-        val imageChannel = Channel<Image>(Channel.UNLIMITED)
+        val imageChannel = Channel<Image>(3)
         imageReader.setOnImageAvailableListener({ reader ->
             val image = reader.acquireNextImage()
             if (image != null) {
-                imageChannel.trySend(image)
+                val sent = imageChannel.trySend(image).isSuccess
+                if (!sent) {
+                    image.close() // Liberación robusta si el buffer está lleno
+                    Timber.w("Imagen descartada en el buffer JNI por exceso de velocidad de captura.")
+                }
             }
         }, imageReaderHandler)
 
@@ -268,12 +285,12 @@ class CameraControllerImpl @Inject constructor(
             addTarget(imageReader.surface)
             set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF)
             
-            // Bypass logic for 30s exposure
-            val requestedExposure = parameters.exposureTimeNs ?: 30_000_000_000L // 30s by default if manual
+            // Lógica de bypass para exposición de 30s
+            val requestedExposure = parameters.exposureTimeNs ?: 30_000_000_000L // 30s por defecto si es manual
             val maxFrameDuration = characteristics.get(CameraCharacteristics.SENSOR_INFO_MAX_FRAME_DURATION) ?: 100000000L
             val maxExposure = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.upper ?: maxFrameDuration
             
-            // We force the requested exposure even if it exceeds maxExposure (Bypass). 
+            // Forzamos la exposición solicitada incluso si supera maxExposure (Bypass). 
             set(CaptureRequest.SENSOR_EXPOSURE_TIME, requestedExposure)
             set(CaptureRequest.SENSOR_FRAME_DURATION, maxOf(requestedExposure, maxFrameDuration))
             
@@ -281,6 +298,20 @@ class CameraControllerImpl @Inject constructor(
             parameters.focusDistance?.let { 
                 set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF)
                 set(CaptureRequest.LENS_FOCUS_DISTANCE, it)
+            }
+        }
+        
+        var timeoutRunnable: Runnable? = null
+        
+        cont.invokeOnCancellation {
+            // Limpieza robusta si la corrutina se cancela
+            timeoutRunnable?.let { imageReaderHandler?.removeCallbacks(it) }
+            imageReader.setOnImageAvailableListener(null, null)
+            imageChannel.close()
+            var remainingImage = imageChannel.tryReceive().getOrNull()
+            while (remainingImage != null) {
+                remainingImage.close()
+                remainingImage = imageChannel.tryReceive().getOrNull()
             }
         }
         
@@ -306,8 +337,11 @@ class CameraControllerImpl @Inject constructor(
                 Timber.d("Exposición aplicada por hardware: $appliedExposure ns")
 
                 val exc = TimeoutException("Image dequeuing took too long")
-                val timeoutRunnable = Runnable { cont.resumeWithException(exc) }
-                imageReaderHandler?.postDelayed(timeoutRunnable, IMAGE_CAPTURE_TIMEOUT_MILLIS)
+                val localTimeoutRunnable = Runnable { 
+                    if (cont.isActive) cont.resumeWithException(exc) 
+                }
+                timeoutRunnable = localTimeoutRunnable
+                imageReaderHandler?.postDelayed(localTimeoutRunnable, IMAGE_CAPTURE_TIMEOUT_MILLIS)
 
                 controllerScope.launch {
                     try {
@@ -320,19 +354,26 @@ class CameraControllerImpl @Inject constructor(
                                 continue
                             }
 
-                            imageReaderHandler?.removeCallbacks(timeoutRunnable)
+                            // Limpiar timeout y listener
+                            timeoutRunnable?.let { imageReaderHandler?.removeCallbacks(it) }
                             imageReader.setOnImageAvailableListener(null, null)
 
-                            // Clean up remaining images
+                            // Limpiar imágenes restantes
                             imageChannel.close()
-                            for (remainingImage in imageChannel) {
+                            var remainingImage = imageChannel.tryReceive().getOrNull()
+                            while (remainingImage != null) {
                                 remainingImage.close()
+                                remainingImage = imageChannel.tryReceive().getOrNull()
                             }
 
                             val mirrored = characteristics.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
                             val exifOrientation = computeExifOrientation(currentRotation, mirrored)
 
-                            cont.resume(CombinedCaptureResult(image, result, exifOrientation, imageReader.imageFormat))
+                            if (cont.isActive) {
+                                cont.resume(CombinedCaptureResult(image, result, exifOrientation, imageReader.imageFormat))
+                            } else {
+                                image.close()
+                            }
                             break
                         }
                     } catch (e: Exception) {
@@ -347,6 +388,17 @@ class CameraControllerImpl @Inject constructor(
                 failure: CaptureFailure
             ) {
                 Timber.e("Capture failed. Reason: ${failure.reason}")
+                
+                // Limpieza de recursos en caso de fallo
+                timeoutRunnable?.let { imageReaderHandler?.removeCallbacks(it) }
+                imageReader.setOnImageAvailableListener(null, null)
+                imageChannel.close()
+                var remainingImage = imageChannel.tryReceive().getOrNull()
+                while (remainingImage != null) {
+                    remainingImage.close()
+                    remainingImage = imageChannel.tryReceive().getOrNull()
+                }
+
                 if (cont.isActive) cont.resumeWithException(RuntimeException("Capture failed: ${failure.reason}"))
             }
         }
@@ -375,7 +427,7 @@ class CameraControllerImpl @Inject constructor(
         }
     }
 
-    private suspend fun saveResult(result: CombinedCaptureResult): PhotoResult = suspendCoroutine { cont ->
+    private fun saveResult(result: CombinedCaptureResult): PhotoResult {
         val extension = if (result.format == ImageFormat.RAW_SENSOR) "dng" else "jpg"
         val mimeType = if (result.format == ImageFormat.RAW_SENSOR) "image/x-adobe-dng" else "image/jpeg"
         val sdf = SimpleDateFormat("yyyy_MM_dd_HH_mm_ss_SSS", Locale.US)
@@ -394,8 +446,7 @@ class CameraControllerImpl @Inject constructor(
         val uri: Uri? = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
 
         if (uri == null) {
-            cont.resumeWithException(IOException("No se pudo crear el URI en MediaStore para $fileName"))
-            return@suspendCoroutine
+            throw IOException("No se pudo crear el URI en MediaStore para $fileName")
         }
 
         try {
@@ -416,17 +467,15 @@ class CameraControllerImpl @Inject constructor(
                 resolver.update(uri, values, null, null)
             }
 
-            cont.resume(PhotoResult(uri.toString(), fileName, result.format, result.orientation))
+            return PhotoResult(uri.toString(), fileName, result.format, result.orientation)
         } catch (exc: IOException) {
-            if (uri != null) {
-                resolver.delete(uri, null, null)
-            }
-            cont.resumeWithException(exc)
+            resolver.delete(uri, null, null)
+            throw exc
         }
     }
 
     companion object {
-        private const val IMAGE_BUFFER_SIZE: Int = 5
+        private const val IMAGE_BUFFER_SIZE: Int = 3
         private const val IMAGE_CAPTURE_TIMEOUT_MILLIS: Long = 60000 // Aumentado para exposiciones largas
 
         data class CombinedCaptureResult(

@@ -5,15 +5,18 @@ project("stelllar_native_stacker")
 # --- 1. Fetch opencv-mobile ---
 include(FetchContent)
 
-# Provide the URL to the precompiled opencv-mobile for Android
+# Proporcionar la URL a opencv-mobile precompilado para Android
+# Se utiliza la versión 20241014 que es compatible y estable.
+# Se añade TLS_VERIFY OFF para evitar fallos de certificados SSL en entornos restringidos.
 FetchContent_Declare(
     opencv_mobile
-    URL https://github.com/nihui/opencv-mobile/releases/download/v24.10.14/opencv-mobile-4.10.0-android.zip
+    URL "https://github.com/nihui/opencv-mobile/releases/download/20241014/opencv-mobile-4.10.0-android.zip"
+    TLS_VERIFY FALSE
 )
 FetchContent_MakeAvailable(opencv_mobile)
 
-# The package contains the OpenCVConfig.cmake, so we can find_package it.
-# Set the prefix path to where FetchContent extracted it
+# El paquete contiene OpenCVConfig.cmake, por lo que podemos usar find_package.
+# Establecemos la ruta al lugar donde FetchContent lo extrajo.
 set(OpenCV_DIR ${opencv_mobile_SOURCE_DIR}/sdk/native/jni)
 find_package(OpenCV REQUIRED)
 
@@ -28,8 +31,8 @@ add_library(
 find_library(log-lib log)
 find_library(android-lib android)
 
-# In Android 26+, AHardwareBuffer is available in libandroid, but sometimes needs explicit link if older.
-# We also need Vulkan.
+# En Android 26+, AHardwareBuffer está en libandroid, pero a veces necesita link explícito.
+# También necesitamos Vulkan.
 find_library(vulkan-lib vulkan)
 
 # --- 4. Target Linking ---
