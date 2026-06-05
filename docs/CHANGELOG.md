@@ -30,6 +30,11 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Creación de [ImageViewerScreen.kt](file:///c:/camerastelllarv3/app/src/main/java/com/stelllar/camera/presentation/compose/ImageViewerScreen.kt) en Compose usando Glide de forma asíncrona y liberando de forma segura los recursos nativos en `onRelease` de `AndroidView`.
   - Remoción de ViewBinding y SafeArgs en [build.gradle (app)](file:///c:/camerastelllarv3/app/build.gradle) y dependencias gradle asociadas.
   - Purgado de layouts XML obsoletos (`activity_camera.xml`, `fragment_camera.xml` en retrato y landscape) y del grafo de navegación `nav_graph.xml`.
+- **Corrección de Compilación NDK (Depuración Nativa):** Solución del build del módulo C++:
+  - Reparación de URL de descarga rota (HTTP 404) de `opencv-mobile` actualizándola a la release estable `v30` (OpenCV 4.10.0).
+  - Eliminación de la dependencia y enlace a `vulkan-lib` incompatible con `minSdkVersion 21` (API level 21).
+  - Reemplazo de la función `cv::estimateAffinePartial2D` (módulo `calib3d` no disponible en `opencv-mobile` por defecto) por una alternativa analítica rígida 2D propia (`estimateRigidTransform2D`) con filtrado robusto de outliers de traslación mediana.
+  - Desactivación de RTTI (`-fno-rtti`) y excepciones (`-fno-exceptions`) en `CMakeLists.txt` para solucionar errores de enlace RTTI (`typeinfo`) y remoción de bloques `try-catch` con `cv::Exception` en `native_stacker.cpp`.
 
 
 

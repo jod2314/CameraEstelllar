@@ -39,6 +39,16 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
     *   **Estiramiento Tonal MTF con LUT:** Aplicación paralela de la curva de transferencia no lineal MTF (con parámetro de sombras medias $m \approx 0.02$) mapeada de forma ultrarrápida mediante una tabla de búsqueda (LUT) de 65536 entradas de 16 bits a 8 bits, resultando en una imagen BGR de 8 bits (`CV_8UC3`).
     *   **Exportación Directa a Kotlin:** Conversión a RGBA de 8 bits (`CV_8UC4`) y volcado de memoria directo mediante `std::memcpy` al buffer de salida `outBuffer` (`DirectByteBuffer`) validando la capacidad del buffer previamente para prevenir desbordamientos de memoria. Liberación síncrona automática de los buffers acumulados en la sesión.
 
+### 6. Corrección de Compilación NDK (Depuración Nativa)
+*   **CMakeLists.txt:**
+    *   Se actualizó la URL de descarga de `opencv-mobile` a la release `v30` para solucionar el error HTTP 404.
+    *   Se eliminó la dependencia a `vulkan-lib` que causaba error de configuración en la plataforma `android-21` (Vulkan requiere API 24+).
+    *   Se agregaron las opciones de compilación `-fno-rtti` y `-fno-exceptions` al target para evitar errores de enlace RTTI (`typeinfo`) y excepciones con `opencv-mobile`.
+*   **native_stacker.cpp:**
+    *   Se eliminó el `#include <opencv2/calib3d.hpp>`.
+    *   Se reemplazó la llamada a `cv::estimateAffinePartial2D` (módulo `calib3d` no disponible en el build mínimo de `opencv-mobile`) por una implementación rígida analítica 2D propia (`estimateRigidTransform2D`) combinada con un filtro robusto de outliers de traslación mediana.
+    *   Se eliminó el bloque `try-catch` con `cv::Exception` en el debayerizado para eliminar dependencias de RTTI/Excepciones.
+
 ## Auditoría y Pruebas
 
 ### Fase 1 (Kotlin)
@@ -56,4 +66,7 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 ### Fase 4 (C++)
 *   **Code Review:** Autorevisión exhaustiva siguiendo los lineamientos del **Code Review Agent (Android Edition)**. Se confirmó la prevención de leaks de memoria nativa, la validación estricta de capacidades de buffers directos, la correcta sincronización de hilos y la documentación de comentarios estrictamente en español.
 *   **Gradle Build, Tests & Lint:** Se ejecutó con éxito el script `.agents/scripts/run_tests.ps1` que comprobó la compilación de CMake y Android NDK con OpenCV, ejecutó las tareas de pruebas de Gradle y aprobó sin incidencias el análisis estático de Android Lint.
+
+### Corrección del Build NDK (Depuración Nativa)
+*   **Gradle Build, Tests & Lint:** Se verificó la descarga, compilación nativa multi-ABI (arm64-v8a, armeabi-v7a, x86, x86_64) y el enlazado exitoso de OpenCV. El script de verificación local `.agents/scripts/run_tests.ps1` se ejecutó con éxito rotundo aprobando los tests y el análisis estático de Android Lint.
 
