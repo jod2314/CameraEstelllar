@@ -181,7 +181,7 @@ fun CameraScreen(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = RowArrangement.SpaceEvenly
+                horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 // Info Oficial
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {

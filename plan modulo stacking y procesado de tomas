@@ -1,0 +1,951 @@
+Prompt investigativo
+Actúa como un especialista senior en astrofotografía computacional, procesamiento digital de imágenes, visión por computador y desarrollo de apps móviles.
+
+Necesito diseñar e implementar un módulo de apilamiento de imágenes para una app de astrofotografía móvil. La app ya permite capturar múltiples tomas de larga exposición con ISO manual. Ahora quiero construir un pipeline completo que incluya:
+
+1. Captura de una secuencia de imágenes astronómicas.
+2. Captura y uso de dark frames como calibración del sensor.
+3. Reducción de ruido mediante procesamiento algorítmico adicional.
+4. Detección precisa de estrellas.
+5. Registro y alineación de tomas para compensar la rotación terrestre.
+6. Apilamiento final para mejorar señal/ruido y detalle.
+
+## Objetivo principal
+Obtener una imagen final apilada con:
+- menor ruido térmico y de patrón fijo,
+- mejor relación señal/ruido,
+- conservación del detalle estelar,
+- corrección de desplazamiento entre frames,
+- robustez ante pequeñas variaciones de brillo, ruido y movimiento.
+
+## Contexto técnico
+La app realizará sesiones de, por ejemplo, 10 tomas. El flujo deseado es:
+
+### Etapa 1: Calibración
+- Capturar uno o varios dark frames.
+- Generar un master dark.
+- Usar ese master dark para corregir el ruido fijo del sensor, hot pixels, amp glow y ruido térmico.
+- Determinar si la calibración debe hacerse por sustracción directa, normalización o por temperatura/exposición equivalente.
+
+### Etapa 2: Limpieza adicional
+- Aplicar técnicas de reducción de ruido que no destruyan estrellas débiles ni detalles finos.
+- Evaluar algoritmos espaciales, temporales y combinados.
+- Considerar estrategias específicas para astrofotografía: preservación de puntos brillantes y bordes estelares.
+
+### Etapa 3: Detección de estrellas
+- Diseñar un algoritmo para localizar estrellas en cada frame.
+- Detectar centroides con precisión subpíxel.
+- Filtrar falsos positivos causados por ruido, hot pixels y artefactos.
+
+### Etapa 4: Registro y alineación
+- Corregir el corrido entre imágenes causado por la rotación de la Tierra.
+- Investigar métodos de alineación basados en estrellas:
+  - matching de patrones,
+  - transformaciones rígidas o afines,
+  - estimación robusta con RANSAC,
+  - correlación de fase o matching geométrico.
+- Definir cómo estimar rotación, traslación y, si aplica, deformaciones menores.
+
+### Etapa 5: Apilamiento
+- Elegir un método de stacking:
+  - promedio,
+  - mediana,
+  - promedio ponderado,
+  - sigma clipping,
+  - enfoque híbrido.
+- Definir cómo rechazar outliers, satélites, aviones, nubes parciales y frames defectuosos.
+
+## Lo que necesito como salida
+Quiero que entregues un documento técnico con las siguientes secciones:
+
+1. Diagnóstico del problema.
+2. Arquitectura propuesta del pipeline.
+3. Explicación técnica de cada etapa.
+4. Algoritmos recomendados y por qué.
+5. Ventajas, riesgos y limitaciones.
+6. Plan de implementación por fases.
+7. Complejidad computacional y consideraciones para móvil.
+8. Métricas de validación y criterios de éxito.
+9. Recomendaciones para una primera versión funcional y una versión avanzada.
+10. Propuesta de investigación adicional para mejorar el sistema después de la primera implementación.
+
+## Restricciones
+- La solución debe ser viable en una app móvil.
+- Debe priorizar precisión sin destruir detalle estelar.
+- Debe considerar memoria, CPU y tiempo de procesamiento.
+- Debe ser escalable desde una versión simple hasta una versión más robusta.
+
+## Formato deseado de respuesta
+- Redacción técnica, clara y estructurada.
+- Incluye un flujo de procesamiento recomendado.
+- Incluye decisiones concretas, no solo teoría.
+- Si hay varias alternativas, compara pros y contras.
+- Termina con una propuesta de roadmap de implementación.
+Análisis técnico
+
+Tu idea está bien planteada, pero el orden correcto del pipeline importa mucho. En astrofotografía, el flujo más sólido suele ser:
+
+captura → calibración con dark frame → limpieza adicional → detección de estrellas → registro/alineación → apilamiento → refinamiento final
+
+1) Dark frame
+
+El dark frame no es un “negativo” en sentido literal; es una referencia de ruido del sensor tomada con el mismo ISO, tiempo de exposición y, idealmente, temperatura parecida. Su función es restar:
+
+hot pixels,
+ruido térmico,
+amp glow,
+patrón fijo del sensor.
+
+Si se usa mal, puede introducir artefactos. Por eso conviene:
+
+capturar varios dark frames,
+promediarlos para crear un master dark,
+aplicar sustracción calibrada.
+2) Limpieza de ruido
+
+Después del dark subtraction, todavía quedará ruido aleatorio. Ahí conviene aplicar un denoise que preserve estrellas. En este tipo de imágenes, un denoise agresivo puede borrar estrellas débiles o deformarlas.
+
+Lo más recomendable es una combinación de:
+
+filtrado suave,
+reducción de hot pixels residuales,
+tratamiento diferente para fondo y puntos brillantes,
+evitar filtros que “embarren” estrellas.
+3) Detección de estrellas
+
+Aquí el reto es separar estrellas reales de:
+
+ruido,
+píxeles calientes,
+reflejos,
+artefactos de compresión o lectura.
+
+Lo más estable suele ser:
+
+detección por umbral adaptativo,
+supresión de fondo,
+cálculo de centroides,
+filtrado por tamaño y forma,
+validación por vecindad.
+4) Registro de imágenes
+
+Como la Tierra rota, las estrellas se desplazan entre frames. Para apilar correctamente hay que alinear cada toma con una referencia. Lo normal es estimar:
+
+traslación,
+rotación,
+y, si hace falta, una transformación afín ligera.
+
+Para esto suele funcionar mejor el matching entre estrellas detectadas que solo correlación global, porque el campo puede cambiar ligeramente y hay ruido.
+
+5) Apilamiento
+
+Cuando las imágenes ya están alineadas, el stacking mejora la relación señal/ruido. En general:
+
+promedio = más detalle, pero sensible a outliers,
+mediana = muy robusta, pero pierde algo de señal,
+sigma clipping = muy buena opción práctica,
+weighted average = útil si algunos frames tienen mejor calidad.
+Plan detallado de implementación
+Fase 1: MVP funcional
+
+Objetivo: que el sistema ya produzca una imagen apilada válida.
+
+Captura de N frames.
+Captura de dark frames.
+Creación de master dark.
+Sustracción del master dark a cada frame.
+Detección básica de estrellas.
+Registro por traslación/rotación.
+Apilamiento por promedio o sigma clipping.
+Exportación de la imagen final.
+Fase 2: Mejora de calidad
+Mejorar detección de estrellas con centroides subpíxel.
+Rechazo de frames de mala calidad.
+Denoise más fino por capas.
+Registro más robusto con RANSAC.
+Apilamiento ponderado por calidad del frame.
+Fase 3: Versión avanzada
+Estimación automática de calidad de exposición.
+Compensación de rotación más precisa.
+Detección de outliers cósmicos o satélites.
+Soporte para distintos sensores y condiciones.
+Optimización por GPU, NDK o procesamiento asíncrono.
+Recomendación práctica de algoritmo
+
+Para una primera versión realista:
+
+Calibración: master dark por promedio.
+Denoise: filtro suave preservando picos brillantes.
+Star detection: umbral adaptativo + centroides.
+Alignment: matching de estrellas + RANSAC.
+Stacking: sigma clipping o weighted mean.
+
+Esa combinación suele dar un balance bueno entre calidad y complejidad.
+
+Métricas para validar resultados
+
+Define éxito con métricas concretas:
+
+reducción de ruido en fondo,
+aumento de SNR,
+preservación de estrellas débiles,
+precisión de alineación entre frames,
+porcentaje de frames aceptados,
+tiempo total de procesamiento,
+consumo de memoria.
+Conclusión operativa
+
+La forma más eficiente de construirlo es no pensar en “un solo algoritmo de apilamiento”, sino en un pipeline de calibración + limpieza + registro + stacking. Ese enfoque te dará una base sólida y escalable.
+
+Puedo convertir esto en una versión todavía más útil para tu caso, por ejemplo:
+
+prompts separados para investigación y desarrollo, o
+un documento técnico estilo especificación de producto, o
+un roadmap para Android con Camera2 y OpenCV.
+
+
+Okay, the user wants a detailed technical document for implementing an image stacking module in a mobile astrophotography app. The user has provided a very specific and structured "Prompt investigativo" acting as a senior specialist. The user is clearly knowledgeable and wants a comprehensive, actionable guide, not just theory. The response needs to be a formal technical document with all ten requested sections, structured exactly as outlined.
+
+First, I need to assess the user's deep need. They're developing a real app and need a concrete plan to move from basic capture to a full calibration-registration-stacking pipeline. The underlying need is for a practical, mobile-viable roadmap that balances accuracy with performance constraints. The response must be authoritative, detailed, and implementation-focused.
+
+I'll structure the response precisely as the user's prompt dictates: 1. Diagnóstico, 2. Arquitectura del Pipeline, 3. Explicación Técnica por Etapa, etc., down to 10. Propuesta de Investigación Adicional. Each section must contain concrete algorithm recommendations with justifications for the mobile context.
+
+For the technical content, I'll draw on established astrophotography processing principles but tailor them specifically to mobile limitations (CPU/GPU, memory, battery). I'll recommend a practical, phased approach: a functional MVP using robust, proven methods (like Gaussian blur star detection and phase correlation for alignment) and then an advanced version with sub-pixel precision and RANSAC. I need to compare alternatives clearly (e.g., Median vs. Sigma Clipping) and state explicit recommendations for the user's app.
+
+The tone must be technical, clear, and structured, exactly as requested. I'll use markdown with clear headings and subheadings to match the user's requested format. The final part should summarize with a concrete roadmap table for implementation phases.
+
+De acuerdo. Procedo a redactar el documento técnico solicitado, actuando como el especialista senior en astrofotografía computacional y desarrollo móvil. La estructura seguirá estrictamente los 10 puntos requeridos, priorizando soluciones viables en un entorno de recursos limitados (CPU/GPU móvil) sin sacrificar la integridad científica del proceso.
+
+Documento Técnico: Pipeline de Apilamiento para Astrofotografía Móvil
+Autor: Especialista Senior en Astrofotografía Computacional
+Versión: 1.0 (Investigación y Diseño Arquitectónico)
+Plataforma Objetivo: iOS / Android (Procesamiento nativo y/o OpenCV)
+
+1. Diagnóstico del Problema
+El desafío principal en la astrofotografía con sensores móviles es la baja relación Señal-Ruido (SNR) . Las limitaciones son triples:
+
+Ruido de Sensor: En larga exposición, el sensor CMOS pequeño genera ruido térmico significativo, amp glow (resplandor del amplificador) y píxeles calientes.
+
+Movimiento Aparente: La rotación terrestre provoca desplazamiento y rotación de campo entre tomas consecutivas. Un promedio directo sin alineación resultará en "estelas" de estrellas en lugar de puntos nítidos.
+
+Falsos Positivos: Los algoritmos de detección confunden fácilmente píxeles calientes con estrellas débiles o ruido de lectura con el fondo del cielo.
+
+Riesgo Crítico: Aplicar filtros de ruido estándar (ej. Non-local Means o Gaussian Blur) antes del apilamiento destruye la PSF (Point Spread Function) de las estrellas, impidiendo una alineación precisa y eliminando estrellas tenues.
+
+2. Arquitectura Propuesta del Pipeline
+El flujo debe ser determinista y reversible hasta la etapa de apilamiento.
+
+text
+[Fase de Captura]
+1. Light Frames (L1...Ln) + Dark Frames (D1...Dn) [Mismo ISO, Exp.]
+
+[Fase 1: Pre-procesado y Calibración] (Por Frame)
+2. Generación de Master Dark (Offline o Pre-sesión)
+3. Sustracción Calibrada: L_calib = L - Master_Dark
+4. Normalización de Hot Pixels Residuales (Filtro de Mapa de Defectos)
+
+[Fase 2: Limpieza Conservativa]
+5. Reducción de Ruido de Fondo (Wavelet o Bilateral suave)
+6. Detección de Estrellas y Extracción de Características
+
+[Fase 3: Registro Geométrico]
+7. Matching de Estrellas (Estrella Referencia vs. Secundarias)
+8. Estimación de Matriz de Transformación (Rotación + Traslación) vía RANSAC
+
+[Fase 4: Apilamiento (Stacking)]
+9. Alineación de Alta Precisión (Interpolación Lanczos/Bicúbica)
+10. Combinación Estadística (Sigma Clipping o Mediana Ponderada)
+
+[Fase 5: Post-Procesado]
+11. Estiramiento de Histograma (Opcional, para visualización final)
+3. Explicación Técnica de Cada Etapa
+Etapa 1: Calibración (Master Dark)
+
+Implementación: Capturar mínimo 10-15 Dark Frames con el obturador tapado (misma ISO/Exposición que las luces).
+
+Algoritmo: Media Aritmética o Mediana por píxel. Decisión: Usar Mediana. La mediana rechaza automáticamente los Rayos Cósmicos (píxeles blancos aleatorios) que pueden aparecer incluso en darks largos en móviles.
+
+Sustracción: float Light_Calib = Light - Master_Dark. No se requiere normalización por exposición si los parámetros son idénticos. Se debe aplicar Pedestal (sumar un valor pequeño como 10 o 100 DN) para evitar recortes a cero en el ruido de lectura.
+
+Etapa 2: Limpieza Conservativa (Pre-Detección)
+
+Problema: El Amp Glow a veces no es perfectamente lineal y deja bordes coloreados tras la resta.
+
+Solución Móvil: Aplicar un filtro Bilateral de baja intensidad o una Transformada Wavelet (à trous) de 1 nivel.
+
+Lógica: Suavizar las áreas planas del cielo (baja frecuencia) pero preservar los bordes duros (alta frecuencia) que son las estrellas. Evitar la reducción de ruido agresiva aquí. El apilamiento es la mejor reducción de ruido.
+
+Etapa 3: Detección de Estrellas
+
+Método Propuesto:
+
+Estimación del Fondo: Background = Mediana(L_calib) o un filtro Mediana de gran kernel (ej. 31x31) para simular el cielo sin estrellas.
+Sustracción del Fondo: Signal = L_calib - Background.
+Umbral Adaptativo: Threshold = 3.5 * sigma_local, donde sigma es la desviación estándar del ruido en el fondo local.
+Detección de Centroides:
+Método Simple: Centro de masa dentro de un radio de 3-5 píxeles alrededor del pico.
+Método Avanzado (Recomendado para precisión): Ajuste Gaussiano 2D en una ventana pequeña para obtener coordenadas Sub-Píxel. Esto es crítico para que el apilamiento no introduzca blur por error de redondeo.
+Filtrado por Morfología: Rechazar objetos con Anchura a Media Altura (FWHM) < 1.0 px (píxeles calientes residuales) o FWHM > 5.0 px (nubes o galaxias difusas si solo se buscan estrellas de alineación).
+Etapa 4: Registro y Alineación
+
+Estrategia de Matching: No es viable buscar correspondencias todas contra todas (O(N^2)).
+
+Método: Triángulos o Cuadriláteros (Asterismos).
+
+Seleccionar las 50-100 estrellas más brillantes de cada imagen.
+Para cada estrella, buscar sus 2-3 vecinas más cercanas para formar triángulos.
+Describir cada triángulo por la relación de sus lados (b/a, c/a).
+Matching: Buscar triángulos con relaciones geométricas similares en la imagen de referencia.
+Estimación de Transformación (RANSAC): Con los pares de estrellas coincidentes, calcular la matriz de Similitud (Rotación + Traslación + Escala uniforme) . La rotación de campo en móviles con objetivos gran angular es mínima, pero existe y debe corregirse.
+Etapa 5: Apilamiento
+
+Método Recomendado: Sigma Clipping (Recorte Sigma).
+
+Calcular la Mediana y la Desviación Absoluta Mediana (MAD) de cada píxel a lo largo de la pila de N imágenes alineadas.
+Para cada píxel, rechazar (ignorar) los valores que se desvíen más de K * sigma (típicamente K=2.0 o 3.0) de la mediana.
+Calcular el Promedio de los píxeles no rechazados.
+Ventaja: Elimina automáticamente estelas de satélites, aviones, rayos cósmicos o fotogramas con movimiento brusco sin necesidad de un algoritmo de detección de objetos separado.
+
+4. Algoritmos Recomendados y Justificación
+Etapa	Algoritmo Recomendado	Alternativa Descartada	Justificación para Móvil
+Dark	Mediana	Promedio Simple	Rechazo inherente de outliers (Rayos Cósmicos) sin costo extra.
+Detección	Umbral Adaptativo Local + Centroide Gaussiano	Hough para círculos	El ruido en móviles varía por zonas (amp glow). Umbral global falla.
+Registro	Triángulos invariantes + RANSAC	Correlación de Fase (FFT)	La Correlación de Fase falla si hay mucha rotación o cambios de brillo. Los triángulos son robustos y ligeros.
+Stacking	Sigma Clipping	Promedio o Mediana	Balance perfecto: Elimina satélites/aviones (como Mediana) pero maximiza SNR en áreas limpias (como Promedio).
+Interpolación	Bicúbica (Al alinear)	Lanczos-3	Lanczos es más nítido pero más costoso CPU. Bicúbica es el estándar de OpenGL/GPU móvil y muy eficiente.
+5. Ventajas, Riesgos y Limitaciones
+Ventajas del Enfoque Propuesto:
+
+Robustez: El flujo no depende de la orientación del teléfono. Funciona en modo trípode o untracked.
+
+Pureza: El ruido de patrón fijo (FPN) se elimina en la etapa 1, evitando que el algoritmo de alineación "persiga" píxeles calientes confundiéndolos con estrellas.
+
+Riesgos y Mitigaciones:
+
+Deriva Térmica: Si los Darks se toman a 25°C y las Lights a 35°C (por calentamiento del móvil), la calibración será imperfecta y dejará residuos de amp glow.
+
+Mitigación: Solicitar al usuario capturar los Darks después de la sesión o implementar Dark Frame Scaling automático (buscar factor de escala en bordes oscuros).
+
+Movimiento de Nubes: Si una nube pasa, cambia el brillo del fondo radicalmente.
+
+Mitigación: Normalización de Fondo antes de la detección de estrellas (restar el fondo local para que las estrellas se detecten sobre un plano cero).
+
+Limitaciones:
+
+Memoria: Procesar 10 imágenes RAW de 12MP en memoria RAM es pesado (~240MB solo las imágenes, más buffers de trabajo). Requiere procesamiento por lotes o uso de texturas GPU.
+
+6. Plan de Implementación por Fases
+Fase	Duración Est.	Entregable Clave
+Fase 0: Fundación	1 Semana	Captura de Darks y Lights en RAW/YUV. Estructuras de buffer.
+Fase 1: MVP Alineado	2 Semanas	Calibración Dark simple (Resta). Alineación por 1 sola estrella guía (seleccionada por usuario o la más brillante). Stacking por Mediana.
+Fase 2: Precisión	3 Semanas	Detección automática de estrellas. Alineación Multi-Estrella con RANSAC. Interpolación Bicúbica.
+Fase 3: Calidad Final	2 Semanas	Implementación de Sigma Clipping. Optimización de Memoria (Procesamiento Secuencial de Archivos).
+Fase 4: Avanzado	2 Semanas	Debayerización correcta (separar canales R,G,B antes de alinear para evitar el "efecto ajedrez"). Registro por Transformada de Fourier (opcional para videos planetarios).
+7. Complejidad Computacional y Consideraciones Móviles
+Detección (Umbral Local): O(W*H*K^2). Riesgo de cuello de botella.
+
+Optimización Móvil: Usar Metal Performance Shaders (iOS) o Vulkan/RenderScript (Android) para el cálculo de la mediana local y la sustracción de fondo. Es 10x-20x más rápido que CPU.
+
+Registro (Triángulos): O(N_stars^2) para matching si no se optimiza.
+
+Optimización: Usar un KD-Tree o un simple hash espacial de la posición para buscar vecinos rápidamente. Mantener N_stars < 200 para asegurar velocidad móvil (<100ms por frame).
+
+Stacking (Sigma Clipping): O(W*H*Frames). Altamente paralelizable.
+
+Solución: Procesar por Tiles (mosaicos) para mantener el uso de RAM bajo. No cargar todos los frames en RAM simultáneamente; ir acumulando buffers de estadística (Suma, Suma de Cuadrados).
+
+8. Métricas de Validación y Criterios de Éxito
+Para validar que el módulo funciona correctamente, se deben medir:
+
+Métrica SNR: (Intensidad_Pico_Estrella) / (Desviación_Estandar_Fondo_Cielo).
+
+Criterio de Éxito: La SNR debe incrementar aproximadamente sqrt(N) veces respecto a una sola toma. Ej: Apilar 10 tomas debe mejorar SNR en un factor ~3.16.
+
+Métrica FWHM (Anchura Estelar):
+
+Criterio: El FWHM de la imagen apilada no debe ser mayor que el FWHM de la mejor toma individual de la serie (indicador de alineación precisa).
+
+Píxeles Calientes Residuales:
+
+Criterio: Cero píxeles calientes visibles en la imagen apilada final (validación visual de calibración correcta).
+
+9. Recomendaciones: Versión Funcional vs. Versión Avanzada
+Primera Versión Funcional (MVP Rápido y Fiable):
+
+Entrada: 8-10 archivos JPEG de alta calidad (o YUV) + 1 Master Dark.
+
+Alineación: Basada en Correlación de Fase global.
+
+Explicación: No detecta estrellas. Trata la imagen como un todo. Funciona bien si el movimiento es solo traslación (sin rotación). Para exposiciones < 30s con gran angular, la rotación es casi nula.
+
+Ventaja: Es extremadamente simple de programar y rápida (FFT). Permite validar el resto del pipeline (Dark, Stacking) en poco tiempo.
+
+Versión Avanzada (Producción):
+
+Entrada: Archivos RAW (DNG / Bayer pattern).
+
+Procesamiento: Debayerización de alta calidad post-alineación.
+
+Razón: Alinear imágenes Bayer es complicado. Se recomienda extraer 4 planos monocromos (R, G1, G2, B), alinearlos independientemente y luego apilar. Esto maximiza la resolución.
+
+Algoritmo: El pipeline completo descrito en la sección 3 (Triángulos + Sigma Clipping).
+
+10. Propuesta de Investigación Adicional (Post-Implementación)
+Una vez el pipeline básico esté estable, se recomienda investigar lo siguiente para diferenciar la app:
+
+De-ringing de Compresión: Las imágenes JPEG de móviles tienen artefactos alrededor de estrellas brillantes. Investigar algoritmos de deconvolución ciega (tipo Richardson-Lucy simplificado) para recuperar la forma gaussiana de la estrella antes de apilar.
+
+Rechazo de Fotogramas por "Lucky Imaging": Durante el apilamiento, medir la agudeza (FWHM) de cada fotograma individual. Ponderar más (o usar exclusivamente) los fotogramas con mejor seeing atmosférico. Esto es factible en móviles porque la atmósfera "congela" la turbulencia en ráfagas cortas.
+
+Integración de GPU para Apilamiento en Tiempo Real: Investigar el uso de Compute Shaders para que el usuario vea la imagen apilada mientras captura las tomas (Live Stacking). Esto proporciona un feedback visual muy potente.
+
+todo esto es sobre la base de que los archivos se trabajaran en formato raw (.dng), ajusta el plan detallado con esto nuevo que te cometno
+Nos indica que el trabajo se hará sobre archivos RAW (.dng), no sobre JPEG. El plan anterior ya mencionaba RAW en la sección 9, pero ahora debemos ajustar todo el documento técnico para asumir que el pipeline opera exclusivamente con datos RAW (Bayer pattern) desde el principio. Hay que modificar detalles sobre calibración, debayerización, manejo de color, y posiblemente la etapa de detección de estrellas. Debemos enfatizar que trabajamos con datos lineales de 12-14 bits antes de cualquier procesamiento de imagen típico de teléfono (denoise, sharpening, gamma). También considerar que el dark frame debe aplicarse en el dominio RAW antes de debayerizar.
+
+Se pide "ajusta el plan detallado con esto nuevo". El usuario quiere que actualice el documento técnico completo considerando RAW .dng. Vamos a reescribir las secciones relevantes, manteniendo la estructura de 10 puntos, pero ajustando la arquitectura, explicación técnica y recomendaciones para el procesamiento RAW nativo. Incluir aspectos como:
+
+Lectura de DNG con librerías (libraw, Adobe DNG SDK, o APIs nativas de cámara).
+
+Calibración en espacio Bayer.
+
+Debayerización de alta calidad después de alineación.
+
+Manejo de niveles de negro y saturación.
+
+Posible uso de flats (aunque no mencionado, podría ser futuro).
+
+El documento debe ser coherente con el hecho de que los datos son RAW lineales sin procesar.
+
+Entonces, generaré una versión revisada del documento técnico enfocada en pipeline RAW.
+
+Entendido. El procesamiento en espacio RAW (lineal, sin demosaico) cambia fundamentalmente la arquitectura del pipeline, especialmente en las etapas de calibración y registro. Ajustaré el plan detallado completo para asumir que la entrada son archivos .dng o buffers Bayer directos del sensor.
+
+A continuación, presento el documento técnico revisado íntegramente para un flujo de trabajo RAW-first.
+
+Documento Técnico (Revisión RAW): Pipeline de Apilamiento para Astrofotografía Móvil con DNG
+Autor: Especialista Senior en Astrofotografía Computacional
+Versión: 2.0 - Enfoque RAW (Bayer CFA)
+Plataforma Objetivo: iOS (Core Image RAW / LibRaw) / Android (Camera2 RAW_SENSOR / Adobe DNG SDK)
+
+1. Diagnóstico del Problema en Contexto RAW
+El uso de .dng (RAW) es obligatorio para astrofotografía de calidad. Procesar JPEGs es inviable por:
+
+Compresión Destructiva: Los JPEGs eliminan estrellas débiles y aplican reducción de ruido agresiva que modifica la PSF (Point Spread Function).
+
+Curva de Gamma y Recorte: Los JPEGs aplican curva tonal no lineal. La sustracción de Dark Frames en espacio no lineal es matemáticamente incorrecta y produce residuos severos.
+
+Precisión Numérica: El RAW es lineal (12-14 bits). Las estrellas débiles ocupan solo unos pocos DN (Digital Numbers). Procesar en RAW preserva la fotometría necesaria para la alineación precisa.
+
+Nuevo Desafío RAW: La imagen está compuesta por un mosaico de Bayer (R, G, G, B). Realizar la alineación sobre un mosaico Bayer requiere técnicas especiales para evitar la pérdida de resolución cromática y el Zippering Artifact (efecto cremallera en bordes).
+
+2. Arquitectura Propuesta del Pipeline (Optimizado para RAW)
+text
+[Fase de Captura - RAW]
+1. Captura de N Light Frames (Buffer RAW Bayer de 12/14 bits)
+2. Captura de N Dark Frames (Buffer RAW Bayer, Mismo ISO/Exp/Temp)
+3. (Opcional Futuro) Captura de Flat Frames / Bias Frames
+
+[Fase 1: Calibración en Espacio Bayer]
+4. Generación de Master Dark Bayer (Mediana por canal R, Gr, Gb, B independiente)
+5. Sustracción Calibrada: Raw_Calib[x,y] = Raw_Light[x,y] - Master_Dark[x,y] + Pedestal
+
+[Fase 2: Pre-procesado y Extracción de Características]
+6. Extracción de Plano de Luminancia Sintética (L) para Alineación.
+   - L = (R + Gr + Gb + B) / 4  [Simple y rápido]
+   - Alternativa: Usar solo píxeles Verdes (Gr/Gb) por tener mayor SNR.
+7. Detección de Estrellas en Plano L (Umbral adaptativo, Centroides Sub-Píxel).
+
+[Fase 3: Registro Geométrico]
+8. Matching de Patrones de Estrellas (Triángulos) en Plano L.
+9. Estimación de Matriz de Transformación (Rotación/Traslación) con RANSAC.
+
+[Fase 4: Apilamiento en Espacio Bayer]
+10. Alineación del Mosaico Bayer Calibrado (Interpolación específica para CFA).
+11. Combinación Estadística por Canal (Sigma Clipping aplicado a R, Gr, Gb, B).
+
+[Fase 5: Post-Procesado Final]
+12. Debayerización de Alta Calidad (AMaZE / LMMSE / Malvar-He-Cutler).
+13. Balance de Blancos y Estiramiento de Histograma (Exportación JPEG/PNG).
+3. Explicación Técnica Detallada de Cada Etapa (Enfoque RAW)
+Etapa 1: Calibración en el Dominio Bayer (La más crítica)
+
+Lectura del DNG: Ignorar cualquier balance de blancos o curva aplicada por el decodificador. Trabajar con los valores crudos de los fotodiodos (ADU - Analog-to-Digital Units).
+
+Nivel de Negro: Los DNGs suelen tener un Black Level (ej: 512, 1024). Restar el nivel de negro antes de la sustracción del dark para mantener la linealidad.
+
+Master Dark: Calcular la Mediana por píxel a través de los N Dark Frames. Nota clave: La mediana debe calcularse por separado para cada posición del filtro Bayer (R, Gr, Gb, B) debido a las ligeras diferencias de ganancia y ruido térmico entre canales. Si se promedia todo junto, se introduce un patrón de ruido de alta frecuencia.
+
+Sustracción: float Calib = Light - MasterDark + Pedestal. El pedestal evita valores negativos que luego la interpolación gestionaría mal.
+
+Etapa 2: Creación del Plano de Luminancia (L)
+
+Problema: No se puede hacer Debayer completo antes de alinear. Debayerizar un mosaico para luego transformarlo geométricamente (rotar/trasladar) es computacionalmente caro y degrada la calidad (dobles bordes de color).
+
+Solución: Crear un mapa monocromo de baja resolución o pseudo-luminancia para Detección y Registro.
+
+Opción A (Recomendada): Super-Pixel. Promediar bloques 2x2 (R+Gr+Gb+B)/4. Esto reduce la imagen a 1/4 de tamaño, acelera el registro y elimina la estructura de Bayer.
+Opción B: Extraer solo el canal Verde (promediando Gr y Gb). El verde tiene el doble de muestras y mayor sensibilidad a estrellas.
+Detección en L: Aplicar Umbral Adaptativo (Desviación Estándar Local) en esta imagen L. Los píxeles calientes residuales suelen aparecer como "puntos" aislados en un solo canal de color (Rojo o Azul). Al usar el promedio o el verde, su impacto se diluye, reduciendo falsos positivos.
+
+Etapa 3: Registro y Alineación
+
+Estimación de la Transformación: Se calcula la matriz de transformación M (Similitud: Rotación + Traslación + Escala) usando las coordenadas de estrellas detectadas en la imagen L de referencia vs la imagen L actual.
+
+Cálculo de la Transformada Inversa: Es más eficiente iterar sobre los píxeles del mosaico Destino y preguntar "¿De qué coordenada del mosaico Origen viene este píxel?".
+
+Etapa 4: Apilamiento en Espacio Bayer (Raw Stacking)
+
+Interpolación Geométrica para CFA:
+
+Si se usa Vecino más cercano (Nearest Neighbor), se preserva la estructura Bayer original (el píxel (0,0) sigue siendo Rojo). Es rápido pero introduce error de alineación de hasta 0.5 px.
+
+Si se usa Bilineal/Bicúbica, se mezclan canales. Esto es fatal para el mosaico Bayer. Si se mezcla un píxel Rojo con uno Verde, la imagen resultante es un barro cromático irrecuperable.
+
+Algoritmo Recomendado: Interpolación de Bayer Guiada por Fase (o AHD Modificado). Método sencillo y efectivo: Separar los 4 planos antes de rotar.
+
+Extraer 4 imágenes monocromas: Img_R, Img_Gr, Img_Gb, Img_B (cada una de tamaño W/2 x H/2).
+Aplicar la Transformación Geométrica (Rotación/Traslación) a cada plano por separado usando interpolación Bicúbica o Lanczos.
+Apilar (Sigma Clipping) cada plano por separado.
+Recombinar el mosaico Bayer resultante (Intercalar R, Gr, Gb, B en sus posiciones correctas).
+Ventaja: La alineación es perfecta (sub-píxel) sin contaminación cruzada de color.
+
+Método de Apilamiento: Sigma Clipping con Estadísticas Robustas.
+
+Para cada uno de los 4 planos monocromos:
+
+Calcular Mediana y MAD (Desviación Absoluta Mediana) del píxel a lo largo de los N frames.
+Rechazar valores > Mediana + (3.0 * 1.4826 * MAD).
+Calcular Promedio de los valores aceptados.
+Etapa 5: Debayerización Final
+
+Momento Crítico: La imagen apilada sigue siendo un mosaico Bayer (W x H), pero ahora con una SNR inmensamente superior.
+
+Algoritmo: Usar AMaZE (Aliasing Minimization and Zipper Elimination) o LMMSE si se dispone de CPU suficiente. En móviles, Malvar-He-Cutler (disponible en OpenCV) es un excelente balance calidad/velocidad.
+
+Balance de Blancos: Aplicar los multiplicadores AsShotNeutral del DNG después del apilamiento. Si se aplica antes, se amplifica el ruido de los canales Rojo/Azul y se falsea el Sigma Clipping.
+
+4. Algoritmos Recomendados (Ajustados a RAW)
+Etapa	Recomendación RAW	Justificación Técnica
+Dark	Mediana por canal CFA	El ruido de patrón fijo es diferente en Rojo, Verde y Azul debido a la electrónica.
+L para Registro	Promedio 2x2 (Super-Pixel)	Elimina el patrón de Bayer sin perder estrellas. Reduce el tiempo de cómputo de registro en un 75%.
+Alineación	Separación de Planos (R, Gr, Gb, B)	Único método que permite rotación sub-píxel sin color moiré en estrellas.
+Stacking	Sigma Clipping por Plano	Aplicado en espacio lineal antes de demosaico. Elimina satélites incluso si cruzan un solo color de píxel.
+Debayer	AMaZE / LMMSE	Preserva estrellas de 1 píxel sin generar halos de color falsos.
+5. Ventajas, Riesgos y Limitaciones del Enfoque RAW
+Ventajas:
+
+Linealidad Fotónica: La señal de la estrella es directamente proporcional al número de fotones. El promedio matemático es físicamente correcto.
+
+Supresión de Ruido de Lectura: El ruido Gaussiano se promedia perfectamente.
+
+Corrección de Viñeteo Natural: Al no tener curvas aplicadas, el centro y bordes oscuros se calibran mejor.
+
+Riesgos y Mitigaciones (RAW-Specific):
+
+Amp Glow No Lineal: En sensores móviles, el Amp Glow (resplandor morado en bordes) a veces escala de forma no lineal con la temperatura. Restar un Dark tomado a 25°C de una Light a 35°C dejará un residuo visible.
+
+Mitigación: Implementar Optimización de Dark (Dark Optimization). Escalar el Master Dark por un factor k hasta que el residuo en los bordes oscuros sea mínimo. Esto es factible solo en RAW por la linealidad.
+
+Píxeles Calientes que "Parpadean": Algunos píxeles calientes no son estables (encienden/apagan). La mediana de los darks no los eliminará si parpadean en fase con las lights.
+
+Mitigación: Mapa de Defectos Estático. Generar una máscara de píxeles con valores anómalos (> 20 sigma sobre el fondo) y reemplazarlos por la mediana de los vecinos del mismo color antes de apilar.
+
+Limitaciones de Rendimiento en Móvil:
+
+Memoria RAM: Un buffer RAW de 12MP (4000x3000) a 16 bits ocupa ~24 MB. Separar en 4 planos (2000x1500 cada uno) ocupa ~12 MB adicionales. Procesar 10 fotos requiere gestión cuidadosa (cargar una a una, acumular buffers de estadística).
+
+6. Plan de Implementación por Fases (Orientado a DNG)
+Fase	Duración	Entregable Específico RAW
+Fase 0: Fundación RAW	2 Semanas	Lectura de DNG con LibRaw (C++) o Adobe DNG SDK. Obtención de buffer Bayer uint16_t crudo y nivel de negro.
+Fase 1: Calibración Simple	2 Semanas	Generación de Master Dark (Mediana 2D). Sustracción en CPU o GPU (Compute Shader). Exportación de un DNG calibrado para verificación.
+Fase 2: Registro Básico	2 Semanas	Creación de plano L (Promedio 2x2). Alineación por Traslación Únicamente (Correlación de Fase o coincidencia de 1 estrella).
+Fase 3: Registro Avanzado	3 Semanas	Detección Multi-Estrella. Rotación con Separación de Planos Bayer. Interpolación Bicúbica por plano.
+Fase 4: Apilamiento Sigma	2 Semanas	Implementación de Sigma Clipping con buffers acumuladores (Suma, SumaCuadrados). Debayer final AMaZE.
+Fase 5: Optimización	1 Semana	Optimización de Dark (Auto-escalado). Mapa de Píxeles Calientes. Procesamiento en hilos de fondo.
+7. Complejidad Computacional en RAW y Consideraciones Móviles
+Separación de Planos Bayer (Requisito para rotación):
+
+Operación: Leer buffer Bayer y escribir 4 buffers separados.
+
+Optimización Móvil: Usar NEON Intrinsics (ARM) o Metal Performance Shaders (Apple). Se puede implementar un Kernel de GPU que muestree directamente el mosaico.
+
+Debayer AMaZE: Es pesado (~50-100 ms en CPU para 12MP).
+
+Solución: Realizar el apilamiento y guardar el resultado como un DNG Apilado (Stacked DNG) . El usuario puede luego revelarlo con la app de galería o con un módulo de revelado integrado que corra en segundo plano. Esto separa el cálculo pesado de la interacción del usuario.
+
+8. Métricas de Validación (Enfoque RAW)
+Linealidad de la Calibración: Tomar un Dark, un Bias, y una Light. Verificar que Light - Dark no tenga recortes en las sombras (valores negativos) si el Pedestal es correcto.
+
+Preservación del Patrón Bayer: Inspeccionar la imagen apilada antes de debayerizar. Debe verse como un mosaico de puntos verdes, rojos y azules nítidos, sin manchas borrosas (indicador de interpolación incorrecta durante el registro).
+
+Ruido de Patrón Fijo (FPN): La imagen apilada final no debe mostrar líneas verticales ni horizontales ni amp glow residual.
+
+9. Versión Funcional vs. Versión Avanzada (RAW)
+Versión Funcional (MVP RAW):
+
+Alineación: Traslación 2D con Vecino Más Cercano (sin rotación).
+
+Ventaja: No requiere separación de planos Bayer. La traslación por vecino más cercano preserva la estructura del mosaico R-G-G-B perfectamente. La imagen resultante es un mosaico Bayer válido desplazado.
+
+Requisito: El usuario debe mantener el móvil perfectamente nivelado para evitar la rotación de campo.
+
+Stacking: Mediana simple (más robusto que el promedio contra satélites sin necesidad de Sigma Clipping complejo).
+
+Versión Avanzada (Producción RAW):
+
+Todo el pipeline descrito: Separación de 4 planos, Rotación Sub-Píxel, Sigma Clipping.
+
+10. Propuesta de Investigación Adicional para RAW
+Calibración con Flats Sintéticos: Las lentes de móviles tienen fuerte viñeteo. Si el usuario mueve el móvil (untracked), las estrellas se desplazan. Se puede usar la Mediana del Apilamiento para generar un Flat Field Sintético. Es decir, el fondo del cielo promediado a lo largo de la sesión revela el viñeteo de la lente. Esto permitiría una corrección de campo plano sin necesidad de que el usuario capture flats.
+
+Compresión de DNG Apilado: Investigar cómo guardar el resultado de 16 bits por canal en un DNG de menor tamaño pero manteniendo la flexibilidad de revelado (Ej: usando compresión sin pérdida del DNG).
+
+Drizzle Integration (Super-Resolución): Aprovechar el dithering natural del movimiento de la tierra para aumentar la resolución espacial de la imagen final usando el algoritmo Drizzle. Esto es particularmente potente en sensores Bayer porque permite recuperar detalle por debajo del límite de Nyquist del mosaico.
+
+Esta respuesta es generada por AI, solo como referencia.
+Cual es la mejor opción para el almacenamiento temporal para el apilado?, recuerda que actualizamos todas las api y sus complementos a lo más actual
+用户想了解在图像叠加（apilamiento）过程中，使用最新API的最佳临时存储方案。我需要提供关于内存（RAM）和磁盘存储选择的建议。为了全面获取信息，我将同时进行多项搜索，涵盖Android和iOS平台的最新存储技术、图像叠加的内存管理策略、以及相关的性能优化实践。
+
+Se encontraron 67 páginas web
+所有并行搜索都已返回结果。这些结果涵盖了Android和iOS的存储最佳实践、内存映射技术、以及一些相关的性能优化方法。为了更深入地了解具体的技术细节，我们需要同时打开一些有前景的链接。
+
+Leer 5 páginas
+Android storage use cases and best practices | App data and files | Android Developers
+MemoryFile | Android Developers
+iOS内存映射技术：mmap如何用有限内存操控无限数据
+FastImageCache核心技术：内存映射与图像表设计
+MappedByteBuffer | Android Developers
+这些资料提供了关于Android和iOS存储方案、内存映射技术等方面的信息。我需要组织回答，涵盖临时存储的考量因素、不同选项（如RAM、磁盘、内存映射文件）及其适用场景，并给出针对图像叠加流程的具体建议。回答将引用相关来源。
+
+Elegir el almacenamiento temporal para tu pipeline de apilado RAW implica decidir entre la velocidad de la RAM y la seguridad de un espacio no volátil. La mejor opción no es única, sino una estrategia híbrida para manejar grandes volúmenes de datos con un consumo de memoria eficiente.
+
+He preparado un análisis detallado para tu flujo de trabajo con archivos .dng, comenzando con una comparativa de las opciones y luego una estrategia por etapas.
+
+📊 Comparativa de Opciones de Almacenamiento Temporal
+Característica	Almacenamiento en RAM (Memoria)	Almacenamiento en Disco (Archivo)	Almacenamiento Híbrido (Recomendado)
+Velocidad	Extrema (ideal para acceso aleatorio y procesamiento en tiempo real).	Lenta a moderada. El I/O a disco introduce latencia.	Casi tan rápido como la RAM pura, gracias al sistema de paginación del SO.
+Capacidad	Muy limitada. La memoria de la app es un recurso escaso, especialmente en móviles.	Alta, limitada solo por el espacio libre del dispositivo.	Muy alta, limitada por el espacio en disco.
+Persistencia	Volátil (se pierde al cerrar la app o si el SO reclama la memoria).	Persistente (sobrevive a cierres de app y reinicios).	Persistente, ya que los datos residen en un archivo en disco.
+Riesgo Principal	OutOfMemoryError (Android) / Crash por presión de memoria (iOS). El pipeline puede fallar catastróficamente.	Ineficiencia y bloqueo del UI. El usuario percibe la app como "lenta".	Complejidad de implementación ligeramente mayor que el resto de opciones.
+🗺️ Estrategia Híbrida: La Mejor Opción para tu Pipeline
+La solución óptima para tu pipeline de apilado RAW combina ambas técnicas. La clave está en decidir dónde y cuándo usar cada una en función de los requisitos de cada etapa del procesamiento.
+
+⚙️ Implementación Técnica por Plataforma
+Para Android (Kotlin/Java):
+
+SharedMemory: Es la opción moderna y preferida para manejar la memoria compartida en Android. Ofrece un control más flexible y seguro que su predecesor MemoryFile. Utilízala para mantener el Master Dark y los pocos buffers de imagen que necesitan ser accedidos con alta frecuencia.
+
+MappedByteBuffer: Tu aliado para el archivo en disco mapeado en memoria. Se crea a través de FileChannel.map(). Es la pieza central de la estrategia. Todos los frames RAW (Light y Dark) y el Master Dark pueden ser accedidos a través de él para el proceso de calibración y apilamiento.
+
+Para iOS (Swift):
+
+mmap: La función del sistema que permite mapear un archivo a la memoria virtual del proceso. Proporciona un rendimiento muy alto al evitar las copias de datos tradicionales del I/O. Usa esto para el archivo en disco que actuará como tu gran espacio de trabajo.
+
+NSCache: El equivalente a SharedMemory para iOS. Un contenedor en memoria para objetos costosos (como el Master Dark o los buffers de trabajo). Tiene la ventaja de ser "thread-safe" y de liberar automáticamente sus objetos bajo presión de memoria del sistema.
+
+📝 Estrategia Paso a Paso
+Archivo de Trabajo en Disco: Crea un archivo temporal en el directorio de caché privado de tu app. En Android, usa context.cacheDir; en iOS, el directorio Caches de tu sandbox. Este archivo será tu "lienzo" de trabajo persistente. Es crucial que lo elimines al finalizar la sesión para no ocupar espacio innecesario.
+
+Mapeo a Memoria: Utiliza MappedByteBuffer (Android) o mmap (iOS) para proyectar el contenido de ese archivo de trabajo en la memoria virtual de tu aplicación.
+
+Carga de Datos Eficiente: A medida que capturas los frames RAW (.dng), puedes escribir sus datos en este archivo mapeado o leerlos desde otro archivo mapeado.
+
+Uso de Caché en RAM: Mantén en SharedMemory (Android) o NSCache (iOS) solo los datos que requieren acceso constante y veloz durante todo el proceso:
+
+El Master Dark (una vez generado).
+
+El buffer de acumulación para el apilamiento (que contiene la suma o mediana de los píxeles).
+
+Uno o dos frames de luz que se estén procesando en ese momento.
+
+Esta estrategia te permite manejar sesiones con muchas imágenes de alta resolución de forma fiable y eficiente, evitando los errores de memoria y ofreciendo una experiencia de usuario fluida.
+
+Si te surge alguna duda sobre esta estrategia o su implementación, no dudes en consultarme.
+
+Ya tengo hecha el app, y tengo implementada la toma múltiple ISO y tiempo de exposición ajustables, dame un plan para la implementación de del proceso de almacenamiento, proceso de staking limpieza de ruido en el orden correcto 
+Bien, el usuario ya tiene la app funcional con captura múltiple, ISO y exposición ajustables. Ahora necesita un plan concreto de implementación para agregar el módulo de apilamiento, incluyendo almacenamiento, limpieza de ruido y el orden correcto de procesos. Quiere algo práctico y secuencial, no solo teoría.
+
+El usuario ha mostrado preferencia por trabajar con RAW (.dng) y hemos discutido almacenamiento híbrido. Ahora necesita un roadmap paso a paso para codificar esta funcionalidad sobre su base existente.
+
+Debo estructurar la respuesta como un plan de implementación claro, con fases lógicas, detallando qué hacer en cada una, incluyendo la gestión de archivos temporales, la calibración con dark frames, la alineación (quizás empezando simple), el apilamiento y la generación del resultado. Debo priorizar un orden correcto: primero captura de darks, luego calibración de lights, luego detección/alineación, luego apilamiento, luego post-proceso.
+
+También debo considerar las restricciones móviles: memoria limitada, necesidad de evitar bloqueos de UI, y uso de APIs modernas (SharedMemory, MappedByteBuffer, etc.) que ya mencioné.
+
+La respuesta debe ser un plan de acción para un desarrollador, no un documento técnico extenso como antes. Frases cortas, bullet points, pasos accionables. Incluiré referencias a las decisiones previas (almacenamiento híbrido, pipeline RAW) pero enfocado en "cómo implementarlo ahora".
+
+Estructuraré en fases con hitos claros. Al final, un checklist rápido para validar.
+
+Perfecto. Partiendo de que la base de captura manual (ISO/Exposición múltiple) ya está resuelta, vamos a definir un Plan de Implementación Secuencial para añadir el módulo de apilado con limpieza de ruido.
+
+Dado que mencionaste que las APIs están actualizadas a lo más reciente, asumiré un stack moderno: Camera2 (RAW_SENSOR) o CameraX en Android, y AVFoundation en iOS, con capacidad de buffer directo.
+
+Aquí tienes la hoja de ruta dividida en Fases Lógicas. El orden es crítico y no debe alterarse.
+
+Plan de Implementación: Módulo de Apilamiento y Calibración
+Fase 0: Preparación del Almacenamiento (La Base de Todo)
+Objetivo: Crear un sistema de archivos temporal que no colapse la RAM del teléfono.
+
+Crear Gestor de Caché de Sesión:
+
+Al iniciar una "Sesión de Astrofoto", crear un directorio único: getCacheDir() + "/astro_session_" + System.currentTimeMillis() + "/".
+
+Archivos a crear:
+
+buffer_stack.raw: Archivo vacío que contendrá el mapa de bits del apilado en curso. Tamaño = Ancho * Alto * 2 bytes (16bit).
+
+buffer_count.raw: Archivo pequeño para contar cuántos frames han contribuido a cada píxel (necesario para el promedio).
+
+Mapear Archivos a Memoria:
+
+Usa FileChannel.map(MapMode.READ_WRITE, ...) para obtener un MappedByteBuffer.
+
+Esto te permite escribir en "disco" a la velocidad de la RAM sin preocuparte por OutOfMemoryError.
+
+Fase 1: Calibración (Dark Frame Subtraction)
+Orden Correcto: Esto debe ocurrir Antes de cualquier análisis de estrellas o alineación.
+
+Paso 1.1: Captura de Darks (UI/UX)
+
+Momento: Inmediatamente después de la sesión de Lights.
+
+Lógica en UI: "Procesando... Por favor, tapa la lente o pon el teléfono boca abajo".
+
+Captura automática: La app dispara 5-10 fotos con exactamente los mismos ajustes (ISO, Exp) que las Lights, pero con el obturador mecánico tapado (o sensor cubierto).
+
+Paso 1.2: Generación de Master Dark (Algoritmo)
+
+Input: Lista de N buffers RAW (Bayer).
+
+Proceso:
+
+Leer píxel (x,y) de todos los N Darks.
+Calcular la Mediana (no el promedio).
+Guardar el resultado en un nuevo MappedByteBuffer llamado master_dark.raw.
+Por qué Mediana: Elimina Rayos Cósmicos (píxeles blancos aleatorios que ocurren incluso con la lente tapada).
+
+Paso 1.3: Pipeline de Sustracción (Por cada Light Frame)
+
+Para cada Light Frame RAW capturado:
+
+Valor_Calibrado[x] = Light[x] - Master_Dark[x] + Pedestal.
+Pedestal: Suma un valor pequeño (ej: 100 en escala 16-bit) para evitar valores negativos que luego rompen los cálculos estadísticos.
+Guardar esta imagen calibrada en un nuevo archivo temporal (o sobreescribir el original si no te importa perder el raw virgen).
+Fase 2: Limpieza de Ruido (Pre-Alineación)
+Objetivo: Suavizar el fondo del cielo sin tocar las estrellas.
+
+Algoritmo Recomendado para Móvil (Rendimiento/Calidad):
+
+Método: Filtro Bilateral o Filtro de Mediana de Malla Pequeña.
+
+Implementación (OpenCV / MPS):
+
+Usa cv::bilateralFilter o MPSImageBilateralFilter.
+
+Parámetros clave:
+
+d (Diámetro): 5-9 píxeles.
+
+SigmaColor: 25-50 (preserva bordes duros de estrellas).
+
+SigmaSpace: 25-50.
+
+Efecto: Elimina el "grano" grueso del ruido de lectura sin emborronar las estrellas pequeñas. Esto ayuda enormemente al detector de estrellas en la Fase 3.
+
+Fase 3: Alineación y Registro (El Corazón del Apilado)
+Implementación por Etapas (De Fácil a Difícil):
+
+Nivel 1 (MVP - Para la primera versión YA): Alineación por Traslación Global
+
+Algoritmo: Correlación de Fase (cv::phaseCorrelate o vDSP_conv).
+
+Procedimiento:
+
+Convertir imagen calibrada a escala de grises 8-bit (solo para esta etapa).
+Comparar Frame 1 (Ref) con Frame 2.
+Obtener dx, dy.
+Mover Frame 2 usando cv::warpAffine.
+Limitación: No corrige rotación. Si el usuario no usa trípode nivelado, las esquinas saldrán mal. Pero es funcional y rápido.
+
+Nivel 2 (Avanzado - Versión Final): Basado en Estrellas (Feature Matching)
+
+Pipeline:
+
+Detectar: cv::SimpleBlobDetector (Filtra por área circular y brillo).
+Describir: Formar Triángulos con las 30 estrellas más brillantes.
+Matching: Buscar triángulos similares entre frames.
+Transformación: Calcular cv::estimateAffinePartial2D (Rotación + Traslación + Escala).
+Truco de Rendimiento: Realiza esta detección sobre una imagen Reducida 4x (Binning). La precisión sub-píxel se recupera al aplicar la transformación a la imagen original de tamaño completo.
+
+Fase 4: Apilamiento (Stacking) y Rechazo de Outliers
+Objetivo: Combinar los N frames alineados en uno solo, eliminando aviones, satélites o nubes.
+
+Método Recomendado: Sigma Clipping (Recorte Sigma)
+
+Pseudo-código (Se ejecuta por cada píxel [x,y] del mosaico final):
+
+java
+// 1. Recoger los valores de ese píxel en los N frames alineados
+List<Float> valoresPixel = new ArrayList<>();
+for (int i = 0; i < numFrames; i++) {
+    valoresPixel.add(frameAlineado[i].getPixel(x, y));
+}
+
+// 2. Calcular Mediana (m) y Desviación Estándar (sigma) de la lista
+float mediana = calcularMediana(valoresPixel);
+float sigma = calcularMAD(valoresPixel) * 1.4826; // MAD es más robusto que StdDev
+
+// 3. Iterar de nuevo: Promediar solo los que están dentro del rango
+float suma = 0;
+int cuenta = 0;
+float limiteInferior = mediana - (2.5 * sigma);
+float limiteSuperior = mediana + (2.5 * sigma);
+
+for (float val : valoresPixel) {
+    if (val > limiteInferior && val < limiteSuperior) {
+        suma += val;
+        cuenta++;
+    }
+}
+
+// 4. Escribir resultado en el buffer de salida
+if (cuenta > 0) {
+    imagenFinal[x][y] = suma / cuenta;
+} else {
+    imagenFinal[x][y] = mediana; // Fallback si todos fueron rechazados
+}
+Fase 5: Post-Procesado y Debayerizado
+Orden Correcto (CRÍTICO):
+
+Apilar en RAW (Bayer). (Fase 4).
+
+Debayerizar (Demosaico). Convertir el mosaico R-G-G-B apilado en una imagen RGB a color.
+
+Recomendación: Usar Algoritmo AMaZE o LMMSE (OpenCV no tiene AMaZE por defecto, pero cv::cvtColor con COLOR_BayerBG2BGR usando interpolación de Malvar-He-Cutler es aceptable).
+
+Ajustar Balance de Blancos.
+
+Estirar Histograma. (Aplicar curva de Gamma/Contraste para hacer visibles las estrellas y nebulosas).
+
+📅 Cronograma de Desarrollo Sugerido
+Semana	Foco	Entregable
+1	Almacenamiento	Implementar MappedByteBuffer para lectura/escritura de RAWs temporales.
+2	Dark & Calibración	Pantalla de captura de Darks + Algoritmo de Mediana + Sustracción.
+3	Alineación Simple	Implementar Correlación de Fase + Warp Affine (Traslación). Apilado por Promedio Simple.
+4	Apilado Robusto	Implementar Sigma Clipping (reemplazar promedio simple). Pruebas de campo.
+5+	Registro Avanzado	Migrar de Correlación de Fase a Matching de Estrellas + RANSAC para soportar Rotación de Campo.
+⚠️ Nota Crucial sobre el Rendimiento Móvil
+Dado que trabajas con .dng (RAW), NO conviertas a Bitmap/RGB hasta el final.
+Trabaja siempre con arrays de Short o Int crudos (16 bits). Las operaciones de Bitmap.createScaledBitmap o Canvas.drawBitmap son lentas y destruyen la precisión necesaria para el apilado astronómico. Usa RenderScript Intrinsics o OpenCV (C++) para los bucles de píxeles.
+
+🚀 Checklist Rápido para la Primera Versión Funcional
+El usuario puede tomar 5 Lights y 5 Darks.
+
+La app guarda los buffers RAW en Caché (no en Galería).
+
+La app calcula la Mediana de los Darks.
+
+La app alinea por Traslación (Correlación de Fase).
+
+La app promedia los píxeles (ignorando outliers vía Sigma Clipping).
+
+La app muestra el JPEG resultante en pantalla.
+
+Que tal sería opencv para este proyecto se bastante detallado en la investigación y en el resultado de la misma 
+El usuario pregunta: "Que tal sería opencv para este proyecto se bastante detallado en la investigación y en el resultado de la misma". Necesito proporcionar una investigación detallada sobre el uso de OpenCV en este proyecto de astrofotografía móvil. Debo cubrir: ventajas, desventajas, alternativas, rendimiento, integración, etc. Buscaré información relevante.
+
+Se encontraron 67 páginas web
+Después de revisar los resultados de las búsquedas, tengo información sobre varios aspectos: proyectos de apilado en vivo con OpenCV, detección de estrellas con SIFT/SURF, comparativas de rendimiento entre OpenCV y otras bibliotecas en móviles, procesamiento de RAW con OpenCV, integración con Camera2, y implementaciones de sigma clipping. Con esta información, puedo estructurar una respuesta detallada que cubra la viabilidad de OpenCV para este proyecto, incluyendo ventajas, desventajas, alternativas y recomendaciones de implementación. La respuesta incluirá referencias a las fuentes consultadas.
+
+Evalúo OpenCV para tu proyecto de astrofotografía móvil. Es una biblioteca potente y muy utilizada en este campo, pero su integración en iOS y Android requiere entender bien sus ventajas e inconvenientes para tomar la mejor decisión.
+
+📊 OpenCV en el Pipeline de Astrofotografía
+Fase 1: Calibración (Dark Frame Subtraction)
+
+Rol de OpenCV: Cálculo de la mediana por píxel.
+
+Viabilidad: Excelente. cv::median o cv::reduce son muy eficientes.
+
+Fase 2: Limpieza de Ruido
+
+Rol de OpenCV: Filtros espaciales (cv::bilateralFilter, cv::fastNlMeansDenoising, cv::medianBlur).
+
+Viabilidad: Buena. OpenCV ofrece una gran variedad de filtros optimizados.
+
+Fase 3: Detección de Estrellas
+
+Rol de OpenCV: Detección de puntos clave (SIFT, SURF, ORB), blob detectors (cv::SimpleBlobDetector), umbrales adaptativos.
+
+Viabilidad: Muy Buena. Los algoritmos de visión por computador de OpenCV son ideales para esto.
+
+Fase 4: Registro y Alineación
+
+Rol de OpenCV: Emparejamiento de características (cv::FlannBasedMatcher), estimación de transformación (cv::findHomography, cv::estimateAffinePartial2D), RANSAC.
+
+Viabilidad: Excelente. Es una de las áreas más fuertes de OpenCV.
+
+Fase 5: Apilamiento
+
+Rol de OpenCV: Promedio (cv::mean), mediana, o implementación de Sigma Clipping con máscaras.
+
+Viabilidad: Buena. Las operaciones de matriz son muy eficientes.
+
+⚖️ Ventajas Clave de Usar OpenCV
+Algoritmos Especializados y Validados: Es el estándar de facto en astrofotografía para software de apilamiento como DeepSkyStacker o Siril. Su implementación de SIFT, SURF o el detector de blobs para estrellas está probada y optimizada. Proyectos en Python como astro-stacker la usan extensamente.
+
+Rendimiento Nativo en Móviles: La clave está en usar el NDK de Android o los bindings de C++ en iOS. OpenCV está escrita en C++ y altamente optimizada. Llamar a sus funciones desde C++ y luego exponerlas a Java/Kotlin/Swift es la vía para un alto rendimiento, evitando el overhead de llamar a la API de Java.
+
+Ecosistema y Comunidad: Existen proyectos de código abierto, como OpenLiveStacker, que demuestran el apilado en vivo en Android usando OpenCV, alcanzando 2-4 imágenes por segundo en resoluciones de 1080p en tablets y móviles.
+
+🚧 Desventajas y Consideraciones Clave
+1. Huella en el APK/IPA: La versión oficial de OpenCV para Android ocupa unos 301 MB. Para una app de producción, esto es un problema grave.
+
+Solución: Usar opencv-mobile, una versión optimizada que reduce el tamaño a unos 18 MB en Android y 3.8 MB en iOS, compilada específicamente para arquitecturas móviles.
+
+2. Curva de Aprendizaje y Configuración (JNI/NDK): Integrar OpenCV en su versión nativa requiere configurar el NDK de Android y escribir código JNI para conectar Java/Kotlin con C++. Es una complejidad adicional significativa.
+
+3. Rendimiento en CPU (Sin GPU): OpenCV, por defecto, ejecuta la mayoría de sus operaciones en la CPU. Para tareas altamente paralelizables como el apilamiento, esto puede ser más lento y consumir más batería que una implementación en GPU con Metal o Vulkan.
+
+📱 Análisis Específico por Plataforma
+OpenCV en Android
+Integración: Muy buena. La API android.hardware.camera2 puede usarse para obtener buffers RAW (RAW_SENSOR) y pasarlos directamente a OpenCV para su procesamiento nativo.
+
+Tamaño: El mayor problema es el tamaño de la librería. opencv-mobile es prácticamente obligatorio.
+
+Rendimiento: Es excelente si se usa el NDK. Proyectos como OpenLiveStacker lo demuestran. El cuello de botella estará en la CPU.
+
+OpenCV en iOS
+Integración: Buena, pero compite con los frameworks nativos de Apple.
+
+Alternativas Nativas: Para tareas simples (filtros, transformaciones), Core Image o Metal Performance Shaders (MPS) pueden ser más rápidos y eficientes energéticamente al usar la GPU. Para algoritmos complejos como la detección de estrellas con SIFT/SURF, OpenCV es una opción sólida, aunque puedes encontrar implementaciones equivalentes o incluso mejores en frameworks de ML como Core ML.
+
+Conclusión para iOS: OpenCV es viable, pero se debe evaluar si partes críticas del pipeline pueden implementarse de forma más eficiente con Metal o MPS, usando OpenCV solo para lo estrictamente necesario.
+
+🆚 Comparativa Rápida: OpenCV vs. Alternativas
+Librerías Nativas (Metal/Core Image/Vulkan)
+
+Ventajas: Máximo rendimiento (GPU), menor consumo de batería, binario más pequeño.
+
+Desventajas: Curva de aprendizaje muy alta, no son multiplataforma.
+
+Caso de Uso: Partes críticas del pipeline (filtros, warping, stacking) en apps que buscan la máxima eficiencia energética y velocidad.
+
+OpenCV
+
+Ventajas: Multiplataforma, algoritmos complejos ya implementados (SIFT, RANSAC, etc.), gran comunidad.
+
+Desventajas: Mayor tamaño de binario, principalmente CPU, curva de aprendizaje con NDK.
+
+Caso de Uso: Todo el pipeline de astrofotografía, especialmente detección de estrellas, matching y registro.
+
+📝 Recomendaciones de Implementación con OpenCV
+Usa opencv-mobile: Es imperativo para mantener tu APK/IPA en un tamaño razonable. Compílala tú mismo o usa las precompiladas.
+
+Procesa en C++ con el NDK/JNI: Escribe el núcleo de tu pipeline (detección, alineación, apilamiento) en C++ usando las funciones de OpenCV. Expón solo una interfaz mínima a tu capa de UI (Kotlin/Swift).
+
+Procesamiento en Segundo Plano: Realiza el apilamiento en un Service (Android) o usando DispatchQueue (iOS) para no bloquear la UI.
+
+Optimiza la Carga y Conversión de Datos: El paso de Bitmap de Android o UIImage de iOS a cv::Mat puede ser un cuello de botella. Para datos RAW, trabaja directamente con los buffers de bytes para alimentar cv::Mat.
+
+Considera un Enfoque Híbrido (Avanzado): Usa OpenCV para las fases de detección de estrellas y estimación de la matriz de transformación (difíciles de implementar desde cero). Luego, aplica la transformación y el apilamiento usando Compute Shaders (Metal/Vulkan) para un rendimiento de GPU inmejorable.
+
+En resumen, OpenCV es una excelente elección para la visión por computador de tu proyecto. La gestión de la memoria con los DNGs y el rendimiento en CPU son los principales desafíos, pero con opencv-mobile y un buen diseño, son perfectamente manejables.

@@ -1,1 +1,0 @@
-[{"navFile":"src\\main\\res\\navigation\\nav_graph.xml","javaFiles":["com.stelllar.camera.fragments.PermissionsFragmentDirections","com.stelllar.camera.fragments.SelectorFragmentDirections","com.stelllar.camera.fragments.CameraFragmentDirections","com.stelllar.camera.fragments.CameraFragmentArgs","com.stelllar.camera.fragments.ImageViewerFragmentArgs"]}]

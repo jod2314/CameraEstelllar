@@ -28,6 +28,7 @@ import javax.inject.Singleton
  * para determinar el límite real del dispositivo.
  */
 @Singleton
+@SuppressLint("NewApi")
 class SensorProber @Inject constructor(
     @ApplicationContext private val context: Context, 
     private val cameraManager: CameraManager
