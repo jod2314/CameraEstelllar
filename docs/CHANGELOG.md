@@ -35,6 +35,11 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Eliminación de la dependencia y enlace a `vulkan-lib` incompatible con `minSdkVersion 21` (API level 21).
   - Reemplazo de la función `cv::estimateAffinePartial2D` (módulo `calib3d` no disponible en `opencv-mobile` por defecto) por una alternativa analítica rígida 2D propia (`estimateRigidTransform2D`) con filtrado robusto de outliers de traslación mediana.
   - Desactivación de RTTI (`-fno-rtti`) y excepciones (`-fno-exceptions`) en `CMakeLists.txt` para solucionar errores de enlace RTTI (`typeinfo`) y remoción de bloques `try-catch` con `cv::Exception` en `native_stacker.cpp`.
+- **Corrección del Estado de Test de Bypass (Sensores):** Aislamiento de estados y consistencia en Compose:
+  - Uso de `remember(cameraId)` para reiniciar savedMax, currentIso, currentExposure, currentBurst y currentTimer al cambiar de cámara en `CameraScreen.kt`.
+  - Migración a arquitectura MVVM pura, inyectando `SettingsRepository` en `CameraViewModel.kt` y eliminando el acceso directo a SharedPreferences desde la capa de vista (`CameraScreen.kt`).
+  - Eliminación de corrutinas redundantes y anidadas (`scope.launch(Dispatchers.IO)` y `scope.launch(Dispatchers.Main)`) en el botón de ejecución del test.
+  - Inclusión de un `DisposableEffect(cameraId)` en `CameraScreen.kt` para cerrar de forma segura la cámara y prevenir leaks al desmontar la pantalla de Compose.
 
 
 

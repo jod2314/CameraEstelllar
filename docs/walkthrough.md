@@ -49,6 +49,16 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
     *   Se reemplazó la llamada a `cv::estimateAffinePartial2D` (módulo `calib3d` no disponible en el build mínimo de `opencv-mobile`) por una implementación rígida analítica 2D propia (`estimateRigidTransform2D`) combinada con un filtro robusto de outliers de traslación mediana.
     *   Se eliminó el bloque `try-catch` con `cv::Exception` en el debayerizado para eliminar dependencias de RTTI/Excepciones.
 
+### 7. Corrección del Estado de Test de Bypass de Exposición (Sensores)
+*   **CameraScreen.kt:**
+    *   Se reemplazó el uso de `remember` genérico por `remember(cameraId)` en los estados `savedMax`, `currentIso`, `currentExposure`, `currentBurst` y `currentTimer` para forzar la reinicialización y aislamiento de datos por sensor al cambiar de cámara.
+    *   Se eliminó la lectura y escritura directa a `SharedPreferences` en la UI, delegando la persistencia de datos al ViewModel a través de `SettingsRepository`.
+    *   Se removieron llamadas de corrutinas redundantes y anidadas (`scope.launch(Dispatchers.IO)` y `scope.launch(Dispatchers.Main)`) en el flujo de ejecución del test.
+    *   Se añadió un `DisposableEffect(cameraId)` para garantizar la liberación de la cámara (`viewModel.closeCamera()`) al desmontar la pantalla de Compose o alternar de sensor, previniendo fugas de hardware.
+*   **CameraViewModel.kt:**
+    *   Se inyectó `SettingsRepository` en el constructor del ViewModel.
+    *   Se expusieron las funciones `saveMaxExposureNs` y `getMaxExposureNs` en el ViewModel para servir como capa intermedia de persistencia para la UI.
+
 ## Auditoría y Pruebas
 
 ### Fase 1 (Kotlin)
@@ -69,4 +79,8 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 
 ### Corrección del Build NDK (Depuración Nativa)
 *   **Gradle Build, Tests & Lint:** Se verificó la descarga, compilación nativa multi-ABI (arm64-v8a, armeabi-v7a, x86, x86_64) y el enlazado exitoso de OpenCV. El script de verificación local `.agents/scripts/run_tests.ps1` se ejecutó con éxito rotundo aprobando los tests y el análisis estático de Android Lint.
+
+### Corrección del Test de Bypass de Exposición (Sensores)
+*   **Code Review:** El subagente **Kotlin UI Code Auditor** auditó exhaustivamente la implementación en `CameraScreen.kt` y `CameraViewModel.kt` confirmando la prevención de leaks de la cámara mediante `DisposableEffect` y el aislamiento de persistencia en el ViewModel a través de `SettingsRepository`, otorgando su aprobación (**APROBADO**).
+*   **Gradle Build, Tests & Lint:** Compiló con éxito y pasó de forma limpia `run_tests.ps1` de punta a punta (pruebas unitarias y análisis estático Android Lint).
 
