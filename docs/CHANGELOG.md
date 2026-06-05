@@ -2,7 +2,18 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [Desbloqueado] - 2026-06-05
+
+### Añadido
+- **Fase 2 - Calibración e Ingesta JNI en C++:** Implementación nativa en [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp) de:
+  - Acumulación robusta de dark frames en un buffer de 32 bits (`uint32_t`) para evitar desbordamientos aritméticos al integrar múltiples tomas.
+  - Promediado de Master Dark en un buffer final de 16 bits (`uint16_t`) con liberación de la memoria temporal del acumulador.
+  - Sustracción calibrada de darks (Dark Frame Subtraction) en espacio de color lineal (RAW Bayer CFA) sin demosaico.
+  - Aplicación de un pedestal de 100 ADU en la sustracción para evitar recortes arbitrarios a cero del ruido de lectura.
+  - Validación dinámica de alineación a 2 bytes para punteros directos de JNI con fallback seguro mediante `std::memcpy` para mitigar fallos de bus en arquitecturas ARM.
+
 ## [Desbloqueado] - 2026-06-04
+
 
 ### Añadido
 - **Protocolo de Orquestación de Agentes:** Creación de [GEMINI.md](file:///c:/camerastelllarv3/GEMINI.md) adaptado para el desarrollo y ciclo de vida de agentes en Android/Kotlin.
