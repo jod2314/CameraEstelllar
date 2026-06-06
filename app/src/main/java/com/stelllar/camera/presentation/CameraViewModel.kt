@@ -1,5 +1,6 @@
 package com.stelllar.camera.presentation
 
+import android.util.Log
 import android.view.Surface
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -94,11 +95,14 @@ class CameraViewModel @Inject constructor(
     }
 
     fun saveMaxExposureNs(cameraId: String, exposureNs: Long) {
+        Log.d("AUDIT", "saveMaxExposureNs - solicitando guardar para sensorId: $cameraId, valor: $exposureNs ns (${exposureNs / 1e9}s)")
         settingsRepository.saveMaxExposureNs(cameraId, exposureNs)
     }
 
     fun getMaxExposureNs(cameraId: String): Long {
-        return settingsRepository.getMaxExposureNs(cameraId)
+        val value = settingsRepository.getMaxExposureNs(cameraId)
+        Log.d("AUDIT", "getMaxExposureNs - leido para sensorId: $cameraId, valor: $value ns (${value / 1e9}s)")
+        return value
     }
 
     fun closeCamera() {

@@ -1,5 +1,6 @@
 package com.stelllar.camera.data.camera
 
+import android.util.Log
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ImageFormat
@@ -52,12 +53,14 @@ class SensorProber @Inject constructor(
      */
     suspend fun runProbe(cameraId: String, physicalCameraId: String? = null): Long {
         initThread()
+        val activeId = physicalCameraId ?: cameraId
+        Log.d("AUDIT", "SensorProber.runProbe - Iniciando para logical cameraId: $cameraId, physicalCameraId: $physicalCameraId, active sensorId: $activeId")
         Timber.i("==================================================")
-        Timber.i("🚀 INICIANDO TEST DE EXPOSICIÓN EN CÁMARA: ${physicalCameraId ?: cameraId}")
+        Timber.i("🚀 INICIANDO TEST DE EXPOSICIÓN EN CÁMARA: $activeId")
         Timber.i("==================================================")
 
-        val activeId = physicalCameraId ?: cameraId
         val characteristics = cameraManager.getCameraCharacteristics(activeId)
+
         val theoreticalMaxExp = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)?.upper ?: 0L
         Timber.i("Exposición máxima teórica ($activeId): ${theoreticalMaxExp / 1e9}s")
 
@@ -166,8 +169,10 @@ class SensorProber @Inject constructor(
             probeHandler = null
         }
         
+        Log.d("AUDIT", "SensorProber.runProbe - Terminando. Resultado: $maxSuccessfulExposureNs ns (${maxSuccessfulExposureNs / 1e9}s)")
         return maxSuccessfulExposureNs
     }
+
 
     private suspend fun tryCaptureWithTimeout(
         session: CameraCaptureSession, 

@@ -1,5 +1,6 @@
 package com.stelllar.camera.presentation.compose
 
+import android.util.Log
 import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.util.Size
@@ -46,9 +47,14 @@ fun CameraScreen(
     
     // Identificador único para el sensor (físico si está disponible, de lo contrario lógico)
     val sensorId = physicalCameraId ?: cameraId
+    Log.d("AUDIT", "UI - sensorId calculado: $sensorId, cameraId logical: $cameraId, physicalCameraId: $physicalCameraId")
     
     // Configuración de Exposición guardada obtenida del ViewModel (Capa de negocio/datos)
-    var savedMax by remember(sensorId) { mutableStateOf(viewModel.getMaxExposureNs(sensorId)) }
+    var savedMax by remember(sensorId) { 
+        val initVal = viewModel.getMaxExposureNs(sensorId)
+        Log.d("AUDIT", "UI remember - inicializando para sensorId: $sensorId con valor: $initVal")
+        mutableStateOf(initVal) 
+    }
     
     // Rangos del hardware
     val isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: android.util.Range(100, 3200)
@@ -60,6 +66,16 @@ fun CameraScreen(
     var currentExposure by remember(sensorId) { mutableStateOf(effectiveMaxExposure.toFloat()) }
     var currentBurst by remember(sensorId) { mutableIntStateOf(1) }
     var currentTimer by remember(sensorId) { mutableIntStateOf(0) }
+
+    // Forzar la recarga reactiva de los estados cuando el sensor cambie en Compose
+    LaunchedEffect(sensorId) {
+        val freshlyLoaded = viewModel.getMaxExposureNs(sensorId)
+        Log.d("AUDIT", "UI LaunchedEffect(sensorId) - recargando para: $sensorId, cargado: $freshlyLoaded")
+        savedMax = freshlyLoaded
+        val maxExp = if (freshlyLoaded > 0) freshlyLoaded else theoreticalMaxExp
+        currentExposure = maxExp.toFloat()
+    }
+
 
     // Sincronizar cambios con el ViewModel
     LaunchedEffect(currentIso, currentExposure, currentBurst, currentTimer) {
@@ -211,6 +227,7 @@ fun CameraScreen(
             
             Button(
                 onClick = {
+                    Log.d("AUDIT", "UI Click - Iniciando test para sensorId: $sensorId, logicalId: $cameraId, physicalId: $physicalCameraId")
                     isTesting = true
                     viewModel.closeCamera()
                     scope.launch {
@@ -218,6 +235,7 @@ fun CameraScreen(
                             // Esperar a que la cámara libere los recursos nativos antes del sondeo
                             delay(1000)
                             viewModel.runSensorProbe(cameraId, physicalCameraId) { maxNs ->
+                                Log.d("AUDIT", "UI Callback - Recibido maxNs: $maxNs para sensorId: $sensorId")
                                 if (maxNs > 0) {
                                     savedMax = maxNs
                                     viewModel.saveMaxExposureNs(sensorId, maxNs)
