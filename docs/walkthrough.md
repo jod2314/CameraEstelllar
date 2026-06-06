@@ -86,7 +86,10 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 ### Corrección del Test de Bypass de Exposición (Sensores)
 *   **Code Review:** El subagente **Kotlin UI Code Auditor** auditó exhaustivamente la implementación en `CameraScreen.kt` y `CameraViewModel.kt` confirmando la prevención de leaks de la cámara mediante `DisposableEffect` y el aislamiento de persistencia en el ViewModel a través de `SettingsRepository`, otorgando su aprobación (**APROBADO**).
 *   **Aislamiento Dinámico:** Se validó que las configuraciones de exposición se guarden y carguen de manera independiente usando el ID de sensor físico unívoco (`val sensorId = physicalCameraId ?: cameraId`), resolviendo el problema de consistencia cruzada en lentes lógicos compartidos.
-*   **Caso de Uso:** Se garantizó que el caso de uso `GetCamerasUseCase` consulte la persistencia utilizando la misma correspondencia unívoca (`physicalId ?: logicalId`).
+*   **Resolución de Colisión en Casos de Uso:** Se corrigió un error en `ProbeSensorUseCase.kt` donde se guardaba el bypass usando únicamente el ID lógico `cameraId` en lugar del identificador único `sensorId = physicalCameraId ?: cameraId`, lo cual causaba que al testear un lente físico se sobrescribieran las propiedades de otros lentes lógicos compartidos.
+*   **Gestión de Estados Reactivos:** Se incorporó un `LaunchedEffect(sensorId)` en `CameraScreen.kt` que fuerza la actualización de los estados locales al cambiar de sensor, evitando la retención de estado heredado en Jetpack Compose.
+*   **Logs de Auditoría:** Se implementó una infraestructura de logs exhaustivos bajo la etiqueta `"AUDIT"` en `SensorProber.kt`, `ProbeSensorUseCase.kt`, `CameraViewModel.kt` y `CameraScreen.kt` que registran en logcat el ciclo de vida completo de la consulta, guardado y pintado del bypass.
 *   **Gradle Build, Tests & Lint:** Compiló con éxito y pasó de forma limpia `run_tests.ps1` de punta a punta (pruebas unitarias y análisis estático Android Lint con compilación exitosa).
+
 
 

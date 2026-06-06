@@ -13,6 +13,8 @@ Este documento registra los hitos alcanzados en el proyecto, junto con sus respe
 | 2026-06-05 | Corrección de compilación NDK: descarga de opencv-mobile y remoción de dependencias (vulkan/calib3d) | `self` (Orquestador) | `CMakeLists.txt`, `native_stacker.cpp` | `66dee40a` |
 | 2026-06-05 | Corregir consistencia cruzada de test de bypass entre sensores e implementar persistencia MVVM | `self` (Orquestador) | `CameraScreen.kt`, `CameraViewModel.kt` | `a5342f5` |
 | 2026-06-05 | Aislar bypass por sensorId físico unívoco y corregir persistencia en Compose y casos de uso | `self` (Orquestador) | `CameraScreen.kt`, `GetCamerasUseCase.kt` | `e5cfc42` |
+| 2026-06-06 | Corregir colisión de bypass en ProbeSensorUseCase e instrumentar logs de auditoría | `self` (Orquestador) | `SensorProber.kt`, `ProbeSensorUseCase.kt`, `CameraViewModel.kt`, `CameraScreen.kt` | `ea43aff` |
+
 
 
 

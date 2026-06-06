@@ -37,7 +37,9 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Desactivación de RTTI (`-fno-rtti`) y excepciones (`-fno-exceptions`) en `CMakeLists.txt` para solucionar errores de enlace RTTI (`typeinfo`) y remoción de bloques `try-catch` con `cv::Exception` en `native_stacker.cpp`.
 - **Corrección del Estado de Test de Bypass (Sensores):** Aislamiento de estados y consistencia en Compose y casos de uso:
   - Definición y uso de un identificador de sensor físico unívoco (`val sensorId = physicalCameraId ?: cameraId`) en `CameraScreen.kt` para aislar de forma absoluta la persistencia de exposición entre lentes físicos que comparten una misma cámara lógica.
-  - Uso de `remember(sensorId)` y `DisposableEffect(sensorId)` para reiniciar `savedMax`, `currentIso`, `currentExposure`, `currentBurst` y `currentTimer` al cambiar de cámara en `CameraScreen.kt`, previniendo fugas y consistencia cruzada.
+  - Resolución de colisiones en `ProbeSensorUseCase.kt` modificando la persistencia de bypass para guardar bajo el identificador único `sensorId` y evitar sobrescribir datos de lentes que comparten el mismo ID lógico.
+  - Implementación de un `LaunchedEffect(sensorId)` en `CameraScreen.kt` que recarga el bypass y actualiza los sliders al cambiar de lente.
+  - Instrumentación de logs de auditoría detallados bajo la etiqueta `"AUDIT"` en `SensorProber.kt`, `ProbeSensorUseCase.kt`, `CameraViewModel.kt` y `CameraScreen.kt` para trazar el almacenamiento y consulta de metadatos de exposición.
   - Modificación del caso de uso `GetCamerasUseCase.kt` para consultar el bypass de exposición a través de `val targetId = physicalId ?: logicalId`.
   - Migración a arquitectura MVVM pura, inyectando `SettingsRepository` en `CameraViewModel.kt` y eliminando el acceso directo a SharedPreferences desde la capa de vista (`CameraScreen.kt`).
   - Eliminación de corrutinas redundantes y anidadas en el botón de ejecución del test.
