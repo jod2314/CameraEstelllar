@@ -9,7 +9,9 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Archivo de configuración [telegram_state.json](file:///C:/camerastelllarv3/telegram/telegram_state.json) para persistencia segura de credenciales (Token, ChatId, LastUpdateId).
   - Script portable [send_reply.ps1](file:///C:/camerastelllarv3/telegram/send_reply.ps1) de envío de mensajes de texto en UTF-8 utilizando rutas dinámicas `$PSScriptRoot`.
   - Script portable [send_files.ps1](file:///C:/camerastelllarv3/telegram/send_files.ps1) para el adjuntado de reportes en PDF e imágenes mediante `curl.exe` y multipart/form-data.
+  - Script portable de sondeo continuo [listen_telegram.ps1](file:///C:/camerastelllarv3/telegram/listen_telegram.ps1) utilizando Long Polling (timeout de 30s) y soporte para comandos `/ping`, `/status`, `/help` y `/stop` con filtrado por ChatId de usuario administrador.
   - Guía técnica detallada [GUIA_MIGRACION_BOT.md](file:///C:/camerastelllarv3/telegram/GUIA_MIGRACION_BOT.md) en español que especifica los pasos para cambiar e integrar bots de Telegram de forma interactiva con `@BotFather` y obtener Chat IDs.
+
 
 ## [Desbloqueado] - 2026-06-05
 

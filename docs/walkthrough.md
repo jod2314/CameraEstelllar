@@ -66,7 +66,9 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 *   **telegram_state.json:** Almacena de forma persistente y segura las credenciales de comunicación (Token de API del Bot, ChatId del usuario administrador) y el offset del bucle de mensajes.
 *   **send_reply.ps1:** Script de PowerShell que lee de forma relativa el archivo de estado y permite el envío seguro de mensajes de texto codificados en UTF-8 hacia el chat del usuario.
 *   **send_files.ps1:** Script de PowerShell para automatizar el envío multipart/form-data de imágenes y reportes PDF usando `curl.exe` nativo de Windows.
+*   **listen_telegram.ps1:** Script de sondeo de comandos (Long Polling) que procesa de manera reactiva en tiempo real las solicitudes enviadas por el usuario autenticado a través de la API de Telegram, con soporte para comandos locales (`/ping`, `/status`, `/help`, `/stop`).
 *   **GUIA_MIGRACION_BOT.md:** Documentación técnica paso a paso para dar de alta bots alternativos con `@BotFather` e integrarlos dinámicamente al proyecto de forma interactiva.
+
 
 
 ## Auditoría y Pruebas

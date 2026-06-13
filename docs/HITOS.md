@@ -15,6 +15,8 @@ Este documento registra los hitos alcanzados en el proyecto, junto con sus respe
 | 2026-06-05 | Aislar bypass por sensorId físico unívoco y corregir persistencia en Compose y casos de uso | `self` (Orquestador) | `CameraScreen.kt`, `GetCamerasUseCase.kt` | `e5cfc42` |
 | 2026-06-06 | Corregir colisión de bypass en ProbeSensorUseCase e instrumentar logs de auditoría | `self` (Orquestador) | `SensorProber.kt`, `ProbeSensorUseCase.kt`, `CameraViewModel.kt`, `CameraScreen.kt` | `ea43aff` |
 | 2026-06-13 | Inicializar integración de control de bot de Telegram y guías técnicas de migración | `self` (Orquestador) | `telegram/*` | `d0ea25c` |
+| 2026-06-13 | Crear script de escucha listen_telegram.ps1 e iniciar pruebas de comandos en tiempo real | `self` (Orquestador) | `telegram/listen_telegram.ps1` | `COMMIT_PENDIENTE` |
+
 
 
 
