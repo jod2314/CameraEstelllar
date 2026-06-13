@@ -16,7 +16,7 @@ Este documento registra los hitos alcanzados en el proyecto, junto con sus respe
 | 2026-06-06 | Corregir colisión de bypass en ProbeSensorUseCase e instrumentar logs de auditoría | `self` (Orquestador) | `SensorProber.kt`, `ProbeSensorUseCase.kt`, `CameraViewModel.kt`, `CameraScreen.kt` | `ea43aff` |
 | 2026-06-13 | Inicializar integración de control de bot de Telegram y guías técnicas de migración | `self` (Orquestador) | `telegram/*` | `d0ea25c` |
 | 2026-06-13 | Crear script de escucha listen_telegram.ps1 e iniciar pruebas de comandos en tiempo real | `self` (Orquestador) | `telegram/listen_telegram.ps1` | `d2a8635` |
-| 2026-06-13 | Configurar asistente de desarrollo remoto mediante cron de fondo y lector JSON de Telegram | `self` (Orquestador) | `telegram/get_pending_messages.ps1` | `COMMIT_PENDIENTE` |
+| 2026-06-13 | Configurar asistente de desarrollo remoto mediante cron de fondo y lector JSON de Telegram | `self` (Orquestador) | `telegram/get_pending_messages.ps1` | `0ea031d` |
 
 
 
