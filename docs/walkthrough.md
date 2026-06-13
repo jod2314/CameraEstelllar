@@ -61,6 +61,13 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 *   **CameraViewModel.kt:**
     *   Se inyectó `SettingsRepository` en el constructor del ViewModel y se expusieron métodos intermediarios de persistencia para la UI.
 
+### 8. Integración del Bot de Telegram y Mensajería
+*   Se creó la subcarpeta `/telegram` para aislar el flujo de control y telemetría de red.
+*   **telegram_state.json:** Almacena de forma persistente y segura las credenciales de comunicación (Token de API del Bot, ChatId del usuario administrador) y el offset del bucle de mensajes.
+*   **send_reply.ps1:** Script de PowerShell que lee de forma relativa el archivo de estado y permite el envío seguro de mensajes de texto codificados en UTF-8 hacia el chat del usuario.
+*   **send_files.ps1:** Script de PowerShell para automatizar el envío multipart/form-data de imágenes y reportes PDF usando `curl.exe` nativo de Windows.
+*   **GUIA_MIGRACION_BOT.md:** Documentación técnica paso a paso para dar de alta bots alternativos con `@BotFather` e integrarlos dinámicamente al proyecto de forma interactiva.
+
 
 ## Auditoría y Pruebas
 

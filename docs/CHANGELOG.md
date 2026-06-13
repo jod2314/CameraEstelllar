@@ -2,9 +2,19 @@
 
 Todos los cambios notables en este proyecto serán documentados en este archivo.
 
+## [Desbloqueado] - 2026-06-13
+
+### Añadido
+- **Integración de Telegram Bot:** Estructura modular para control bidireccional y mensajería en la carpeta `/telegram`:
+  - Archivo de configuración [telegram_state.json](file:///C:/camerastelllarv3/telegram/telegram_state.json) para persistencia segura de credenciales (Token, ChatId, LastUpdateId).
+  - Script portable [send_reply.ps1](file:///C:/camerastelllarv3/telegram/send_reply.ps1) de envío de mensajes de texto en UTF-8 utilizando rutas dinámicas `$PSScriptRoot`.
+  - Script portable [send_files.ps1](file:///C:/camerastelllarv3/telegram/send_files.ps1) para el adjuntado de reportes en PDF e imágenes mediante `curl.exe` y multipart/form-data.
+  - Guía técnica detallada [GUIA_MIGRACION_BOT.md](file:///C:/camerastelllarv3/telegram/GUIA_MIGRACION_BOT.md) en español que especifica los pasos para cambiar e integrar bots de Telegram de forma interactiva con `@BotFather` y obtener Chat IDs.
+
 ## [Desbloqueado] - 2026-06-05
 
 ### Añadido
+
 - **Fase 2 - Calibración e Ingesta JNI en C++:** Implementación nativa en [native_stacker.cpp](file:///c:/camerastelllarv3/app/src/main/cpp/native_stacker.cpp) de:
   - Acumulación robusta de dark frames en un buffer de 32 bits (`uint32_t`) para evitar desbordamientos aritméticos al integrar múltiples tomas.
   - Promediado de Master Dark en un buffer final de 16 bits (`uint16_t`) con liberación de la memoria temporal del acumulador.
