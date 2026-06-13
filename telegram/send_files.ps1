@@ -1,3 +1,9 @@
+# Parámetros del script (deben ser la primera instrucción)
+param(
+    [string]$FilePath = "",
+    [string]$Caption = "Reporte de actividades generado automáticamente"
+)
+
 # Obtener la ruta del directorio del script para localizar el archivo de estado
 $StateFile = Join-Path $PSScriptRoot "telegram_state.json"
 
@@ -11,11 +17,6 @@ $Config = Get-Content -Raw -Path $StateFile | ConvertFrom-Json
 $Token = $Config.Token
 $ChatId = $Config.ChatId
 
-# Parámetros del script
-param(
-    [string]$FilePath = "",
-    [string]$Caption = "Reporte de actividades generado automáticamente"
-)
 
 if (-not $FilePath) {
     Write-Error "Debes proveer una ruta de archivo válida con -FilePath"

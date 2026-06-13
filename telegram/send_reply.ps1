@@ -1,3 +1,8 @@
+# Parámetros del script (deben ser la primera instrucción)
+param(
+    [string]$Text = "¡Hola! Este es un mensaje automatizado desde la PC."
+)
+
 # Configuración de codificación de salida a UTF-8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -15,10 +20,6 @@ $Token = $Config.Token
 $ChatId = $Config.ChatId
 $Url = "https://api.telegram.org/bot$Token/sendMessage"
 
-# Mensaje a enviar parametrizado
-param(
-    [string]$Text = "¡Hola! Este es un mensaje automatizado desde la PC."
-)
 
 $Body = @{
     chat_id = $ChatId
