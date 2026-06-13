@@ -67,7 +67,10 @@ Este documento detalla el trabajo realizado para adaptar el protocolo de agentes
 *   **send_reply.ps1:** Script de PowerShell que lee de forma relativa el archivo de estado y permite el envío seguro de mensajes de texto codificados en UTF-8 hacia el chat del usuario.
 *   **send_files.ps1:** Script de PowerShell para automatizar el envío multipart/form-data de imágenes y reportes PDF usando `curl.exe` nativo de Windows.
 *   **listen_telegram.ps1:** Script de sondeo de comandos (Long Polling) que procesa de manera reactiva en tiempo real las solicitudes enviadas por el usuario autenticado a través de la API de Telegram, con soporte para comandos locales (`/ping`, `/status`, `/help`, `/stop`).
+*   **get_pending_messages.ps1:** Script de PowerShell que lee la cola de actualizaciones de la API de Telegram, filtra y extrae las solicitudes de texto libre enviadas por el usuario administrador y las entrega en un formato JSON limpio, actualizando el offset de control en el archivo de estado.
+*   **Asistente de Desarrollo Remoto (Antigravity Cron):** Configuración de un temporizador recurrente cron (`*/2 * * * *`) que despierta asíncronamente al Agente de IA para examinar el JSON de mensajes de Telegram, procesar comandos libres (como compilar, ver logs o editar archivos) y responder el resultado en caliente hacia el celular del desarrollador.
 *   **GUIA_MIGRACION_BOT.md:** Documentación técnica paso a paso para dar de alta bots alternativos con `@BotFather` e integrarlos dinámicamente al proyecto de forma interactiva.
+
 
 
 
