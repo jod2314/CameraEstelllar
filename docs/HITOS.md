@@ -17,7 +17,7 @@ Este documento registra los hitos alcanzados en el proyecto, junto con sus respe
 | 2026-06-13 | Inicializar integración de control de bot de Telegram y guías técnicas de migración | `self` (Orquestador) | `telegram/*` | `d0ea25c` |
 | 2026-06-13 | Crear script de escucha listen_telegram.ps1 e iniciar pruebas de comandos en tiempo real | `self` (Orquestador) | `telegram/listen_telegram.ps1` | `d2a8635` |
 | 2026-06-13 | Configurar asistente de desarrollo remoto mediante cron de fondo y lector JSON de Telegram | `self` (Orquestador) | `telegram/get_pending_messages.ps1` | `0ea031d` |
-| 2026-06-13 | Implementar asistente interactivo continuo con soporte para ejecución remota de comandos | `self` (Orquestador) | `telegram/asistente_telegram.ps1` | `COMMIT_PENDIENTE` |
+| 2026-06-13 | Implementar asistente interactivo continuo con soporte para ejecución remota de comandos | `self` (Orquestador) | `telegram/asistente_telegram.ps1` | `5ab2f1e` |
 
 
 
