@@ -11,8 +11,10 @@ Todos los cambios notables en este proyecto serán documentados en este archivo.
   - Script portable [send_files.ps1](file:///C:/camerastelllarv3/telegram/send_files.ps1) para el adjuntado de reportes en PDF e imágenes mediante `curl.exe` y multipart/form-data.
   - Script portable de sondeo continuo [listen_telegram.ps1](file:///C:/camerastelllarv3/telegram/listen_telegram.ps1) utilizando Long Polling (timeout de 30s) y soporte para comandos `/ping`, `/status`, `/help` y `/stop` con filtrado por ChatId de usuario administrador.
   - Script de cola de comandos [get_pending_messages.ps1](file:///C:/camerastelllarv3/telegram/get_pending_messages.ps1) que recupera mensajes nuevos de Telegram y los entrega al Agente en formato JSON limpio, actualizando el offset de forma atómica.
+  - Script interactivo continuo [asistente_telegram.ps1](file:///C:/camerastelllarv3/telegram/asistente_telegram.ps1) que implementa polling rápido (cada 2s) y procesamiento de comandos complejos: registro de notas locales (`/nota`), cronómetros de recordatorio asíncronos (`/recuerdame`) y ejecución remota de comandos de terminal de Windows (`/cmd`) con retorno de la salida estándar.
   - Integración de **Asistente de Desarrollo de Fondo** mediante un programador cron recurrente que consulta de forma periódica las solicitudes libres en el Bot de Telegram para ejecutarlas directamente en la PC desde el Agente de Antigravity.
   - Guía técnica detallada [GUIA_MIGRACION_BOT.md](file:///C:/camerastelllarv3/telegram/GUIA_MIGRACION_BOT.md) en español que especifica los pasos para cambiar e integrar bots de Telegram de forma interactiva con `@BotFather` y obtener Chat IDs.
+
 
 
 
